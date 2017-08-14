@@ -35,38 +35,46 @@
  *
  *)
 
-unit uTestExtension;
+program MDIBrowser;
 
 {$I cef.inc}
 
-interface
-
 uses
   {$IFDEF DELPHI16_UP}
-  Winapi.Windows,
+  Vcl.Forms, WinApi.Windows,
   {$ELSE}
-  Windows,
-  {$ENDIF}
-  uCEFRenderProcessHandler, uCEFBrowserProcessHandler, uCEFInterfaces, uCEFProcessMessage,
-  uCEFv8Context, uCEFTypes, uCEFv8Handler;
+  Forms, Windows,
+  {$ENDIF }
+  uCEFApplication,
+  uMainForm in 'uMainForm.pas' {MainForm},
+  uChildForm in 'uChildForm.pas' {ChildForm};
 
-type
-  TTestExtension = class
-    class procedure mouseover(const data: string);
-  end;
+{$R *.RES}
 
-implementation
+// CEF3 needs to set the LARGEADDRESSAWARE flag which allows 32-bit processes to use up to 3GB of RAM.
+{$SetPEFlags IMAGE_FILE_LARGE_ADDRESS_AWARE}
 
-class procedure TTestExtension.mouseover(const data: string);
-var
-  msg: ICefProcessMessage;
 begin
-  msg := TCefProcessMessageRef.New('mouseover');
-  msg.ArgumentList.SetString(0, data);
+  GlobalCEFApp              := TCefApplication.Create;
+  GlobalCEFApp.FlashEnabled := False;
+  GlobalCEFApp.FastUnload   := True;   // Enable the fast unload controller, which speeds up tab/window close by running a tab's onunload js handler independently of the GUI
 
-  // Sending a message back to the browser. It'll be received in the TChromium.OnProcessMessageReceived event.
-  // TCefv8ContextRef.Current returns the v8 context for the frame that is currently executing Javascript.
-  TCefv8ContextRef.Current.Browser.SendProcessMessage(PID_BROWSER, msg);
-end;
+  // In case you want to use custom directories for the CEF3 binaries, cache, cookies and user data.
+{
+  GlobalCEFApp.FrameworkDirPath     := 'cef';
+  GlobalCEFApp.ResourcesDirPath     := 'cef';
+  GlobalCEFApp.LocalesDirPath       := 'cef\locales';
+  GlobalCEFApp.cache                := 'cef\cache';
+  GlobalCEFApp.cookies              := 'cef\cookies';
+  GlobalCEFApp.UserDataPath         := 'cef\User Data';
+}
 
+  if GlobalCEFApp.StartMainProcess then
+    begin
+      Application.Initialize;
+      Application.CreateForm(TMainForm, MainForm);
+      Application.Run;
+    end;
+
+  GlobalCEFApp.Free;
 end.

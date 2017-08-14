@@ -48,11 +48,11 @@ interface
 
 uses
   {$IFDEF DELPHI16_UP}
-  WinApi.Windows, System.Classes, System.SysUtils,
+  WinApi.Windows, System.Classes, System.SysUtils, System.UITypes, WinApi.ActiveX, System.Math,
   {$ELSE}
-  Windows, Classes, SysUtils,
+  Windows, Classes, SysUtils, Controls, ActiveX, Math,
   {$ENDIF}
-  uCEFTypes, uCEFInterfaces, uCEFLibFunctions, uCEFResourceHandler;
+  uCEFTypes, uCEFInterfaces, uCEFLibFunctions, uCEFResourceHandler, uCEFGetGeolocationCallback;
 
 const
   Kernel32DLL = 'kernel32.dll';
@@ -73,8 +73,8 @@ function CefInt64Set(int32_low, int32_high: Integer): Int64;
 function CefInt64GetLow(const int64_val: Int64): Integer;
 function CefInt64GetHigh(const int64_val: Int64): Integer;
 
-function CefGetObject(ptr: Pointer): TObject;
-function CefGetData(const i: ICefBaseRefCounted): Pointer;
+function CefGetObject(ptr: Pointer): TObject;  {$IFDEF SUPPORTS_INLINE} inline; {$ENDIF}
+function CefGetData(const i: ICefBaseRefCounted): Pointer; {$IFDEF SUPPORTS_INLINE} inline; {$ENDIF}
 
 function CefStringAlloc(const str: ustring): TCefString;
 function CefStringClearAndGet(var str: TCefString): ustring;
@@ -103,7 +103,7 @@ function cef_string_copy(const src: PCefChar; src_len: NativeUInt; output: PCefS
 
 procedure WindowInfoAsChild(var aWindowInfo : TCefWindowInfo; aParent : THandle; aRect : TRect; const aWindowName : string = '');
 procedure WindowInfoAsPopUp(var aWindowInfo : TCefWindowInfo; aParent : THandle; const aWindowName : string = '');
-procedure WindowInfoAsWindowless(var aWindowInfo : TCefWindowInfo; aParent : THandle; aTransparent : boolean; const aWindowName : string = '');
+procedure WindowInfoAsWindowless(var aWindowInfo : TCefWindowInfo; aParent : THandle; const aWindowName : string = '');
 
 function TzSpecificLocalTimeToSystemTime(lpTimeZoneInformation: PTimeZoneInformation; lpLocalTime, lpUniversalTime: PSystemTime): BOOL; stdcall; external Kernel32DLL;
 function SystemTimeToTzSpecificLocalTime(lpTimeZoneInformation: PTimeZoneInformation; lpUniversalTime, lpLocalTime: PSystemTime): BOOL; stdcall; external Kernel32DLL;
@@ -120,6 +120,7 @@ procedure CefSetCrashKeyValue(const aKey, aValue : ustring);
 
 procedure CefLog(const aFile : string; aLine, aSeverity : integer; const aMessage : string);
 procedure OutputDebugMessage(const aMessage : string);
+function  CustomExceptionHandler(const aFunctionName : string; const aException : exception) : boolean;
 
 function CefRegisterSchemeHandlerFactory(const SchemeName, HostName: ustring; const handler: TCefResourceHandlerClass): Boolean;
 function CefClearSchemeHandlerFactories : boolean;
@@ -137,10 +138,59 @@ function CheckResources(const aResourcesDirPath : string) : boolean;
 function CheckDLLs(const aFrameworkDirPath : string) : boolean;
 function CheckDLLVersion(const aDLLFile : string; aMajor, aMinor, aRelease, aBuild : uint16) : boolean;
 
+function  CefParseUrl(const url: ustring; var parts: TUrlParts): Boolean;
+function  CefCreateUrl(var parts: TUrlParts): ustring;
+function  CefFormatUrlForSecurityDisplay(const originUrl: string): string;
+function  CefGetMimeType(const extension: ustring): ustring;
+procedure CefGetExtensionsForMimeType(const mimeType: ustring; extensions: TStringList);
+
+function CefBase64Encode(const data: Pointer; dataSize: NativeUInt): ustring;
+function CefBase64Decode(const data: ustring): ICefBinaryValue;
+function CefUriEncode(const text: ustring; usePlus: Boolean): ustring;
+function CefUriDecode(const text: ustring; convertToUtf8: Boolean; unescapeRule: TCefUriUnescapeRule): ustring;
+
+function CefParseJson(const jsonString: ustring; options: TCefJsonParserOptions): ICefValue;
+function CefParseJsonAndReturnError(const jsonString   : ustring;
+                                          options      : TCefJsonParserOptions;
+                                    out   errorCodeOut : TCefJsonParserError;
+                                    out   errorMsgOut  : ustring): ICefValue;
+function CefWriteJson(const node: ICefValue; options: TCefJsonWriterOptions): ustring;
+
+function CefCreateDirectory(const fullPath: ustring): Boolean;
+function CefGetTempDirectory(out tempDir: ustring): Boolean;
+function CefCreateNewTempDirectory(const prefix: ustring; out newTempPath: ustring): Boolean;
+function CefCreateTempDirectoryInDirectory(const baseDir, prefix: ustring; out newDir: ustring): Boolean;
+function CefDirectoryExists(const path: ustring): Boolean;
+function CefDeleteFile(const path: ustring; recursive: Boolean): Boolean;
+function CefZipDirectory(const srcDir, destFile: ustring; includeHiddenFiles: Boolean): Boolean;
+procedure CefLoadCRLSetsFile(const path : ustring);
+
+function CefIsKeyDown(aWparam : WPARAM) : boolean;
+function CefIsKeyToggled(aWparam : WPARAM) : boolean;
+function GetCefMouseModifiers(awparam : WPARAM) : TCefEventFlags; overload;
+function GetCefMouseModifiers : TCefEventFlags; overload;
+function GetCefKeyboardModifiers(aWparam : WPARAM; aLparam : LPARAM) : TCefEventFlags;
+function GefCursorToWindowsCursor(aCefCursor : TCefCursorType) : TCursor;
+
+procedure DropEffectToDragOperation(aEffect : Longint; var aAllowedOps : TCefDragOperations);
+procedure DragOperationToDropEffect(const aDragOperations : TCefDragOperations; var aEffect: Longint);
+
+function  DeviceToLogical(aValue : integer; const aDeviceScaleFactor : double) : integer; overload;
+procedure DeviceToLogical(var aEvent : TCEFMouseEvent; const aDeviceScaleFactor : double); overload;
+procedure DeviceToLogical(var aPoint : TPoint; const aDeviceScaleFactor : double); overload;
+function  LogicalToDevice(aValue : integer; const aDeviceScaleFactor : double) : integer; overload;
+procedure LogicalToDevice(var aRect : TCEFRect; const aDeviceScaleFactor : double); overload;
+
+function GetScreenDPI : integer;
+function GetDeviceScaleFactor : single;
+
+function CefGetGeolocation(const aCallbackFunction : TOnLocationUpdate) : boolean;
+
 implementation
 
 uses
-  uCEFConstants, uCEFApplication, uCEFSchemeHandlerFactory;
+  uCEFConstants, uCEFApplication, uCEFSchemeHandlerFactory, uCEFValue,
+  uCEFBinaryValue;
 
 function CefColorGetA(color: TCefColor): Byte;
 begin
@@ -381,7 +431,6 @@ begin
   aWindowInfo.parent_window                := aParent;
   aWindowInfo.menu                         := 0;
   aWindowInfo.windowless_rendering_enabled := ord(False);
-  aWindowInfo.transparent_painting_enabled := ord(False);
   aWindowInfo.window                       := 0;
 end;
 
@@ -397,11 +446,10 @@ begin
   aWindowInfo.parent_window                := aParent;
   aWindowInfo.menu                         := 0;
   aWindowInfo.windowless_rendering_enabled := ord(False);
-  aWindowInfo.transparent_painting_enabled := ord(False);
   aWindowInfo.window                       := 0;
 end;
 
-procedure WindowInfoAsWindowless(var aWindowInfo : TCefWindowInfo; aParent : THandle; aTransparent : boolean; const aWindowName : string);
+procedure WindowInfoAsWindowless(var aWindowInfo : TCefWindowInfo; aParent : THandle; const aWindowName : string);
 begin
   aWindowInfo.ex_style                     := 0;
   aWindowInfo.window_name                  := CefString(aWindowName);
@@ -413,7 +461,6 @@ begin
   aWindowInfo.parent_window                := aParent;
   aWindowInfo.menu                         := 0;
   aWindowInfo.windowless_rendering_enabled := ord(True);
-  aWindowInfo.transparent_painting_enabled := ord(aTransparent);
   aWindowInfo.window                       := 0;
 end;
 
@@ -464,9 +511,13 @@ begin
   if (GlobalCEFApp <> nil) and GlobalCEFApp.LibLoaded then
     CefLog('CEF4Delphi', DEFAULT_LINE, CEF_LOG_SEVERITY_ERROR, aMessage);
   {$ENDIF}
+end;
 
-  if (GlobalCEFApp <> nil) and GlobalCEFApp.ReRaiseExceptions then
-    raise Exception.Create(aMessage);
+function CustomExceptionHandler(const aFunctionName : string; const aException : exception) : boolean;
+begin
+  OutputDebugMessage(aFunctionName + ' error : ' + aException.message);
+
+  Result := (GlobalCEFApp <> nil) and GlobalCEFApp.ReRaiseExceptions;
 end;
 
 function CefRegisterSchemeHandlerFactory(const SchemeName : ustring;
@@ -596,7 +647,7 @@ begin
       end;
   except
     on e : exception do
-      OutputDebugMessage('CheckLocales error: ' + e.Message);
+      if CustomExceptionHandler('CheckLocales', e) then raise;
   end;
 end;
 
@@ -612,7 +663,7 @@ begin
         if DirectoryExists(aResourcesDirPath) then
           begin
             TempDir := IncludeTrailingPathDelimiter(aResourcesDirPath);
-            if CustomPathIsRelative(PChar(TempDir)) then TempDir := ExtractFilePath(ParamStr(0)) + TempDir;
+            if CustomPathIsRelative(TempDir) then TempDir := ExtractFilePath(ParamStr(0)) + TempDir;
           end
          else
           exit;
@@ -630,7 +681,7 @@ begin
               FileExists(TempDir + 'devtools_resources.pak');
   except
     on e : exception do
-      OutputDebugMessage('CheckResources error: ' + e.Message);
+      if CustomExceptionHandler('CheckResources', e) then raise;
   end;
 end;
 
@@ -646,7 +697,7 @@ begin
         if DirectoryExists(aFrameworkDirPath) then
           begin
             TempDir := IncludeTrailingPathDelimiter(aFrameworkDirPath);
-            if CustomPathIsRelative(PChar(TempDir)) then TempDir := ExtractFilePath(ParamStr(0)) + TempDir;
+            if CustomPathIsRelative(TempDir) then TempDir := ExtractFilePath(ParamStr(0)) + TempDir;
           end
          else
           exit;
@@ -663,7 +714,7 @@ begin
               FileExists(TempDir + 'widevinecdmadapter.dll');
   except
     on e : exception do
-      OutputDebugMessage('CheckDLLs error: ' + e.Message);
+      if CustomExceptionHandler('CheckDLLs', e) then raise;
   end;
 end;
 
@@ -704,7 +755,7 @@ begin
         end;
     except
       on e : exception do
-        OutputDebugMessage('GetExtendedFileVersion error: ' + e.Message);
+        if CustomExceptionHandler('GetExtendedFileVersion', e) then raise;
     end;
   finally
     if (TempBuffer <> nil) then FreeMem(TempBuffer);
@@ -726,7 +777,7 @@ begin
       end;
   except
     on e : exception do
-      OutputDebugMessage('GetDLLVersion error: ' + e.Message);
+      if CustomExceptionHandler('GetDLLVersion', e) then raise;
   end;
 end;
 
@@ -748,6 +799,432 @@ begin
   {$ELSE}
   Result := PathIsRelativeAnsi(PChar(aPath));
   {$ENDIF}
+end;
+
+function CefParseUrl(const url: ustring; var parts: TUrlParts): Boolean;
+var
+  u: TCefString;
+  p: TCefUrlParts;
+begin
+  FillChar(p, sizeof(p), 0);
+  u := CefString(url);
+  Result := cef_parse_url(@u, p) <> 0;
+  if Result then
+  begin
+    //parts.spec := CefString(@p.spec);
+    parts.scheme := CefString(@p.scheme);
+    parts.username := CefString(@p.username);
+    parts.password := CefString(@p.password);
+    parts.host := CefString(@p.host);
+    parts.port := CefString(@p.port);
+    parts.origin := CefString(@p.origin);
+    parts.path := CefString(@p.path);
+    parts.query := CefString(@p.query);
+  end;
+end;
+
+function CefCreateUrl(var parts: TUrlParts): ustring;
+var
+  p: TCefUrlParts;
+  u: TCefString;
+begin
+  FillChar(p, sizeof(p), 0);
+  p.spec := CefString(parts.spec);
+  p.scheme := CefString(parts.scheme);
+  p.username := CefString(parts.username);
+  p.password := CefString(parts.password);
+  p.host := CefString(parts.host);
+  p.port := CefString(parts.port);
+  p.origin := CefString(parts.origin);
+  p.path := CefString(parts.path);
+  p.query := CefString(parts.query);
+  FillChar(u, SizeOf(u), 0);
+  if cef_create_url(@p, @u) <> 0 then
+    Result := CefString(@u) else
+    Result := '';
+end;
+
+function CefFormatUrlForSecurityDisplay(const originUrl: string): string;
+var
+  o: TCefString;
+begin
+  o := CefString(originUrl);
+  Result := CefStringFreeAndGet(cef_format_url_for_security_display(@o));
+end;
+
+function CefGetMimeType(const extension: ustring): ustring;
+var
+  s: TCefString;
+begin
+  s := CefString(extension);
+  Result := CefStringFreeAndGet(cef_get_mime_type(@s));
+end;
+
+procedure CefGetExtensionsForMimeType(const mimeType: ustring; extensions: TStringList);
+var
+  list: TCefStringList;
+  s, str: TCefString;
+  i: Integer;
+begin
+  list := cef_string_list_alloc();
+  try
+    s := CefString(mimeType);
+    cef_get_extensions_for_mime_type(@s, list);
+    for i := 0 to cef_string_list_size(list) - 1 do
+    begin
+      FillChar(str, SizeOf(str), 0);
+      cef_string_list_value(list, i, @str);
+      extensions.Add(CefStringClearAndGet(str));
+    end;
+  finally
+    cef_string_list_free(list);
+  end;
+end;
+
+function CefBase64Encode(const data: Pointer; dataSize: NativeUInt): ustring;
+begin
+  Result:= CefStringFreeAndGet(cef_base64encode(data, dataSize));
+end;
+
+function CefBase64Decode(const data: ustring): ICefBinaryValue;
+var
+  s: TCefString;
+begin
+  s := CefString(data);
+  Result := TCefBinaryValueRef.UnWrap(cef_base64decode(@s));
+end;
+
+function CefUriEncode(const text: ustring; usePlus: Boolean): ustring;
+var
+  s: TCefString;
+begin
+  s := CefString(text);
+  Result := CefStringFreeAndGet(cef_uriencode(@s, Ord(usePlus)));
+end;
+
+function CefUriDecode(const text: ustring; convertToUtf8: Boolean;
+  unescapeRule: TCefUriUnescapeRule): ustring;
+var
+  s: TCefString;
+begin
+  s := CefString(text);
+  Result := CefStringFreeAndGet(cef_uridecode(@s, Ord(convertToUtf8), unescapeRule));
+end;
+
+function CefParseJson(const jsonString: ustring; options: TCefJsonParserOptions): ICefValue;
+var
+  s: TCefString;
+begin
+  s := CefString(jsonString);
+  Result := TCefValueRef.UnWrap(cef_parse_json(@s, options));
+end;
+
+function CefParseJsonAndReturnError(const jsonString   : ustring;
+                                          options      : TCefJsonParserOptions;
+                                    out   errorCodeOut : TCefJsonParserError;
+                                    out   errorMsgOut  : ustring): ICefValue;
+var
+  s, e: TCefString;
+begin
+  s := CefString(jsonString);
+  FillChar(e, SizeOf(e), 0);
+  Result := TCefValueRef.UnWrap(cef_parse_jsonand_return_error(@s, options, @errorCodeOut, @e));
+  errorMsgOut := CefString(@e);
+end;
+
+function CefWriteJson(const node: ICefValue; options: TCefJsonWriterOptions): ustring;
+begin
+  Result := CefStringFreeAndGet(cef_write_json(CefGetData(node), options));
+end;
+
+function CefCreateDirectory(const fullPath: ustring): Boolean;
+var
+  path: TCefString;
+begin
+  path := CefString(fullPath);
+  Result := cef_create_directory(@path) <> 0;
+end;
+
+function CefGetTempDirectory(out tempDir: ustring): Boolean;
+var
+  path: TCefString;
+begin
+  FillChar(path, SizeOf(path), 0);
+  Result := cef_get_temp_directory(@path) <> 0;
+  tempDir := CefString(@path);
+end;
+
+function CefCreateNewTempDirectory(const prefix: ustring; out newTempPath: ustring): Boolean;
+var
+  path, pref: TCefString;
+begin
+  FillChar(path, SizeOf(path), 0);
+  pref := CefString(prefix);
+  Result := cef_create_new_temp_directory(@pref, @path) <> 0;
+  newTempPath := CefString(@path);
+end;
+
+function CefCreateTempDirectoryInDirectory(const baseDir, prefix: ustring;
+  out newDir: ustring): Boolean;
+var
+  base, path, pref: TCefString;
+begin
+  FillChar(path, SizeOf(path), 0);
+  pref := CefString(prefix);
+  base := CefString(baseDir);
+  Result := cef_create_temp_directory_in_directory(@base, @pref, @path) <> 0;
+  newDir := CefString(@path);
+end;
+
+function CefDirectoryExists(const path: ustring): Boolean;
+var
+  str: TCefString;
+begin
+  str := CefString(path);
+  Result := cef_directory_exists(@str) <> 0;
+end;
+
+function CefDeleteFile(const path: ustring; recursive: Boolean): Boolean;
+var
+  str: TCefString;
+begin
+  str := CefString(path);
+  Result := cef_delete_file(@str, Ord(recursive)) <> 0;
+end;
+
+function CefZipDirectory(const srcDir, destFile: ustring; includeHiddenFiles: Boolean): Boolean;
+var
+  src, dst: TCefString;
+begin
+  src := CefString(srcDir);
+  dst := CefString(destFile);
+  Result := cef_zip_directory(@src, @dst, Ord(includeHiddenFiles)) <> 0;
+end;
+
+procedure CefLoadCRLSetsFile(const path : ustring);
+var
+  TempPath : TCefString;
+begin
+  TempPath := CefString(path);
+  cef_load_crlsets_file(@TempPath);
+end;
+
+function CefGetGeolocation(const aCallbackFunction : TOnLocationUpdate) : boolean;
+var
+  TempGeoCallBack : ICefGetGeolocationCallback;
+begin
+  TempGeoCallBack := TCefFastGetGeolocationCallback.Create(aCallbackFunction);
+  Result          := (cef_get_geolocation(TempGeoCallBack.Wrap) <> 0);
+end;
+
+function CefIsKeyDown(aWparam : WPARAM) : boolean;
+begin
+  Result := (GetKeyState(aWparam) < 0);
+end;
+
+function CefIsKeyToggled(aWparam : WPARAM) : boolean;
+begin
+  Result := (GetKeyState(aWparam) and $1) <> 0;
+end;
+
+function GetCefMouseModifiers(aWparam : WPARAM) : TCefEventFlags;
+begin
+  Result := EVENTFLAG_NONE;
+
+  if ((aWparam and MK_CONTROL) <> 0) then Result := Result or EVENTFLAG_CONTROL_DOWN;
+  if ((aWparam and MK_SHIFT)   <> 0) then Result := Result or EVENTFLAG_SHIFT_DOWN;
+  if ((aWparam and MK_LBUTTON) <> 0) then Result := Result or EVENTFLAG_LEFT_MOUSE_BUTTON;
+  if ((aWparam and MK_MBUTTON) <> 0) then Result := Result or EVENTFLAG_MIDDLE_MOUSE_BUTTON;
+  if ((aWparam and MK_RBUTTON) <> 0) then Result := Result or EVENTFLAG_RIGHT_MOUSE_BUTTON;
+  if CefIsKeyDown(VK_MENU)           then Result := Result or EVENTFLAG_ALT_DOWN;
+  if CefIsKeyToggled(VK_NUMLOCK)     then Result := Result or EVENTFLAG_NUM_LOCK_ON;
+  if CefIsKeyToggled(VK_CAPITAL)     then Result := Result or EVENTFLAG_CAPS_LOCK_ON;
+end;
+
+function GetCefMouseModifiers : TCefEventFlags;
+begin
+  Result := EVENTFLAG_NONE;
+
+  if CefIsKeyDown(MK_CONTROL)    then Result := Result or EVENTFLAG_CONTROL_DOWN;
+  if CefIsKeyDown(MK_SHIFT)      then Result := Result or EVENTFLAG_SHIFT_DOWN;
+  if CefIsKeyDown(MK_LBUTTON)    then Result := Result or EVENTFLAG_LEFT_MOUSE_BUTTON;
+  if CefIsKeyDown(MK_MBUTTON)    then Result := Result or EVENTFLAG_MIDDLE_MOUSE_BUTTON;
+  if CefIsKeyDown(MK_RBUTTON)    then Result := Result or EVENTFLAG_RIGHT_MOUSE_BUTTON;
+  if CefIsKeyDown(VK_MENU)       then Result := Result or EVENTFLAG_ALT_DOWN;
+  if CefIsKeyToggled(VK_NUMLOCK) then Result := Result or EVENTFLAG_NUM_LOCK_ON;
+  if CefIsKeyToggled(VK_CAPITAL) then Result := Result or EVENTFLAG_CAPS_LOCK_ON;
+end;
+
+function GetCefKeyboardModifiers(aWparam : WPARAM; aLparam : LPARAM) : TCefEventFlags;
+begin
+  Result := EVENTFLAG_NONE;
+
+  if CefIsKeyDown(VK_SHIFT)      then Result := Result or EVENTFLAG_SHIFT_DOWN;
+  if CefIsKeyDown(VK_CONTROL)    then Result := Result or EVENTFLAG_CONTROL_DOWN;
+  if CefIsKeyDown(VK_MENU)       then Result := Result or EVENTFLAG_ALT_DOWN;
+  if CefIsKeyToggled(VK_NUMLOCK) then Result := Result or EVENTFLAG_NUM_LOCK_ON;
+  if CefIsKeyToggled(VK_CAPITAL) then Result := Result or EVENTFLAG_CAPS_LOCK_ON;
+
+
+  case aWparam of
+    VK_RETURN:
+      if (((aLparam shr 16) and KF_EXTENDED) <> 0) then Result := Result or EVENTFLAG_IS_KEY_PAD;
+
+    VK_INSERT,
+    VK_DELETE,
+    VK_HOME,
+    VK_END,
+    VK_PRIOR,
+    VK_NEXT,
+    VK_UP,
+    VK_DOWN,
+    VK_LEFT,
+    VK_RIGHT :
+      if (((aLparam shr 16) and KF_EXTENDED) = 0) then Result := Result or EVENTFLAG_IS_KEY_PAD;
+
+    VK_NUMLOCK,
+    VK_NUMPAD0,
+    VK_NUMPAD1,
+    VK_NUMPAD2,
+    VK_NUMPAD3,
+    VK_NUMPAD4,
+    VK_NUMPAD5,
+    VK_NUMPAD6,
+    VK_NUMPAD7,
+    VK_NUMPAD8,
+    VK_NUMPAD9,
+    VK_DIVIDE,
+    VK_MULTIPLY,
+    VK_SUBTRACT,
+    VK_ADD,
+    VK_DECIMAL,
+    VK_CLEAR :
+      Result := Result or EVENTFLAG_IS_KEY_PAD;
+
+    VK_SHIFT :
+      if CefIsKeyDown(VK_LSHIFT) then
+        Result := Result or EVENTFLAG_IS_LEFT
+       else
+        if CefIsKeyDown(VK_RSHIFT) then
+          Result := Result or EVENTFLAG_IS_RIGHT;
+
+    VK_CONTROL :
+      if CefIsKeyDown(VK_LCONTROL) then
+        Result := Result or EVENTFLAG_IS_LEFT
+       else
+        if CefIsKeyDown(VK_RCONTROL) then
+          Result := Result or EVENTFLAG_IS_RIGHT;
+
+    VK_MENU :
+      if CefIsKeyDown(VK_LMENU) then
+        Result := Result or EVENTFLAG_IS_LEFT
+       else
+        if CefIsKeyDown(VK_RMENU) then
+          Result := Result or EVENTFLAG_IS_RIGHT;
+
+    VK_LWIN :
+      Result := Result or EVENTFLAG_IS_LEFT;
+
+    VK_RWIN :
+      Result := Result or EVENTFLAG_IS_RIGHT;
+  end;
+end;
+
+function GefCursorToWindowsCursor(aCefCursor : TCefCursorType) : TCursor;
+begin
+  case aCefCursor of
+    CT_POINTER                  : Result := crArrow;
+    CT_CROSS                    : Result := crCross;
+    CT_HAND                     : Result := crHandPoint;
+    CT_IBEAM                    : Result := crIBeam;
+    CT_WAIT                     : Result := crHourGlass;
+    CT_HELP                     : Result := crHelp;
+    CT_EASTRESIZE               : Result := crSizeWE;
+    CT_NORTHRESIZE              : Result := crSizeNS;
+    CT_NORTHEASTRESIZE          : Result := crSizeNESW;
+    CT_NORTHWESTRESIZE          : Result := crSizeNWSE;
+    CT_SOUTHRESIZE              : Result := crSizeNS;
+    CT_SOUTHEASTRESIZE          : Result := crSizeNWSE;
+    CT_SOUTHWESTRESIZE          : Result := crSizeNESW;
+    CT_WESTRESIZE               : Result := crSizeWE;
+    CT_NORTHSOUTHRESIZE         : Result := crSizeNS;
+    CT_EASTWESTRESIZE           : Result := crSizeWE;
+    CT_NORTHEASTSOUTHWESTRESIZE : Result := crSizeNESW;
+    CT_NORTHWESTSOUTHEASTRESIZE : Result := crSizeNWSE;
+    CT_COLUMNRESIZE             : Result := crHSplit;
+    CT_ROWRESIZE                : Result := crVSplit;
+    CT_MOVE                     : Result := crSizeAll;
+    CT_PROGRESS                 : Result := crAppStart;
+    CT_NONE                     : Result := crNone;
+    CT_NODROP,
+    CT_NOTALLOWED               : Result := crNo;
+    CT_GRAB,
+    CT_GRABBING                 : Result := crDrag;
+
+    else Result := crDefault;
+  end;
+end;
+
+procedure DropEffectToDragOperation(aEffect: Longint; var aAllowedOps : TCefDragOperations);
+begin
+  aAllowedOps := DRAG_OPERATION_NONE;
+
+  if ((aEffect and DROPEFFECT_COPY) <> 0) then aAllowedOps := aAllowedOps or DRAG_OPERATION_COPY;
+  if ((aEffect and DROPEFFECT_LINK) <> 0) then aAllowedOps := aAllowedOps or DRAG_OPERATION_LINK;
+  if ((aEffect and DROPEFFECT_MOVE) <> 0) then aAllowedOps := aAllowedOps or DRAG_OPERATION_MOVE;
+end;
+
+procedure DragOperationToDropEffect(const aDragOperations : TCefDragOperations; var aEffect: Longint);
+begin
+  aEffect := DROPEFFECT_NONE;
+
+  if ((aDragOperations and DRAG_OPERATION_COPY) <> 0) then aEffect := aEffect or DROPEFFECT_COPY;
+  if ((aDragOperations and DRAG_OPERATION_LINK) <> 0) then aEffect := aEffect or DROPEFFECT_LINK;
+  if ((aDragOperations and DRAG_OPERATION_MOVE) <> 0) then aEffect := aEffect or DROPEFFECT_MOVE;
+end;
+
+function DeviceToLogical(aValue : integer; const aDeviceScaleFactor : double) : integer;
+begin
+  Result := floor(aValue / aDeviceScaleFactor);
+end;
+
+procedure DeviceToLogical(var aEvent : TCEFMouseEvent; const aDeviceScaleFactor : double);
+begin
+  aEvent.x := DeviceToLogical(aEvent.x, aDeviceScaleFactor);
+  aEvent.y := DeviceToLogical(aEvent.y, aDeviceScaleFactor);
+end;
+
+procedure DeviceToLogical(var aPoint : TPoint; const aDeviceScaleFactor : double);
+begin
+  aPoint.x := DeviceToLogical(aPoint.x, aDeviceScaleFactor);
+  aPoint.y := DeviceToLogical(aPoint.y, aDeviceScaleFactor);
+end;
+
+function LogicalToDevice(aValue : integer; const aDeviceScaleFactor : double) : integer;
+begin
+  Result := floor(aValue * aDeviceScaleFactor);
+end;
+
+procedure LogicalToDevice(var aRect : TCEFRect; const aDeviceScaleFactor : double);
+begin
+  aRect.x      := LogicalToDevice(aRect.x,      aDeviceScaleFactor);
+  aRect.y      := LogicalToDevice(aRect.y,      aDeviceScaleFactor);
+  aRect.width  := LogicalToDevice(aRect.width,  aDeviceScaleFactor);
+  aRect.height := LogicalToDevice(aRect.height, aDeviceScaleFactor);
+end;
+
+function GetScreenDPI : integer;
+var
+  TempDC : HDC;
+begin
+  TempDC := GetDC(0);
+  Result := GetDeviceCaps(TempDC, LOGPIXELSX);
+  ReleaseDC(0, TempDC);
+end;
+
+function GetDeviceScaleFactor : single;
+begin
+  Result := GetScreenDPI / 96;
 end;
 
 end.

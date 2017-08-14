@@ -48,58 +48,62 @@ interface
 
 uses
   {$IFDEF DELPHI16_UP}
-  WinApi.Windows, WinApi.Messages, System.Classes, Vcl.Controls, Vcl.Graphics, Vcl.Forms,
+  WinApi.Windows, WinApi.Messages, System.Classes, Vcl.Controls, Vcl.Graphics, Vcl.Forms, WinApi.ActiveX,
   {$ELSE}
-  Windows, Messages, Classes, Controls, Graphics, Forms,
+  Windows, Messages, Classes, Controls, Graphics, Forms, ActiveX,
   {$ENDIF}
   uCEFTypes, uCEFInterfaces, uCEFLibFunctions, uCEFMiscFunctions, uCEFClient,
   uCEFPDFPrintCallback, uCEFStringVisitor, uCEFConstants, uCEFTask,
   uCEFDeleteCookiesCallback, uCEFDomVisitor, uCEFChromiumEvents,
-  uCEFChromiumOptions, uCEFChromiumFontOptions, uCEFPDFPrintOptions;
+  uCEFChromiumOptions, uCEFChromiumFontOptions, uCEFPDFPrintOptions,
+  uCEFDragAndDropMgr;
 
 type
   TChromium = class(TComponent, IChromiumEvents)
     protected
-      FCompHandle         : HWND;
-      FVisitor            : ICefStringVisitor;
-      FPDFPrintcb         : ICefPdfPrintCallback;
-      FCookiDeletercb     : ICefDeleteCookiesCallback;
-      FClientHandler      : TVCLClientHandler;
-      FHandler            : ICefClient;
-      FBrowser            : ICefBrowser;
-      FBrowserId          : Integer;
-      FDefaultUrl         : ustring;
-      FOptions            : TChromiumOptions;
-      FFontOptions        : TChromiumFontOptions;
-      FPDFPrintOptions    : TPDFPrintOptions;
-      FDefaultEncoding    : ustring;
-      FProxyType          : integer;
-      FProxyServer        : string;
-      FProxyPort          : integer;
-      FProxyUsername      : string;
-      FProxyPassword      : string;
-      FProxyScriptURL     : string;
-      FProxyByPassList    : string;
-      FUpdatePreferences  : boolean;
-      FCustomHeaderName   : string;
-      FCustomHeaderValue  : string;
-      FAddCustomHeader    : boolean;
-      FDoNotTrack         : boolean;
-      FSendReferrer       : boolean;
-      FHyperlinkAuditing  : boolean;
-      FCookiePrefs        : integer;
-      FImagesPrefs        : integer;
-      FCMStoragePath      : ustring;
-      FZoomStep           : byte;
-      FWindowName         : string;
-      FPrefsFileName      : string;
-      FIsOSR              : boolean;
-      FInitialized        : boolean;
-      FClosing            : boolean;
-      FWindowInfo         : TCefWindowInfo;
-      FBrowserSettings    : TCefBrowserSettings;
-      FDevWindowInfo      : TCefWindowInfo;
-      FDevBrowserSettings : TCefBrowserSettings;
+      FCompHandle             : HWND;
+      FVisitor                : ICefStringVisitor;
+      FPDFPrintcb             : ICefPdfPrintCallback;
+      FCookiDeletercb         : ICefDeleteCookiesCallback;
+      FHandler                : ICefClient;
+      FBrowser                : ICefBrowser;
+      FBrowserId              : Integer;
+      FDefaultUrl             : ustring;
+      FOptions                : TChromiumOptions;
+      FFontOptions            : TChromiumFontOptions;
+      FPDFPrintOptions        : TPDFPrintOptions;
+      FDefaultEncoding        : ustring;
+      FProxyType              : integer;
+      FProxyServer            : string;
+      FProxyPort              : integer;
+      FProxyUsername          : string;
+      FProxyPassword          : string;
+      FProxyScriptURL         : string;
+      FProxyByPassList        : string;
+      FUpdatePreferences      : boolean;
+      FCustomHeaderName       : string;
+      FCustomHeaderValue      : string;
+      FAddCustomHeader        : boolean;
+      FDoNotTrack             : boolean;
+      FSendReferrer           : boolean;
+      FHyperlinkAuditing      : boolean;
+      FCookiePrefs            : integer;
+      FImagesPrefs            : integer;
+      FCMStoragePath          : ustring;
+      FZoomStep               : byte;
+      FWindowName             : string;
+      FPrefsFileName          : string;
+      FIsOSR                  : boolean;
+      FInitialized            : boolean;
+      FClosing                : boolean;
+      FWindowInfo             : TCefWindowInfo;
+      FBrowserSettings        : TCefBrowserSettings;
+      FDevWindowInfo          : TCefWindowInfo;
+      FDevBrowserSettings     : TCefBrowserSettings;
+      FDragOperations         : TCefDragOperations;
+      FDragDropManager        : TCEFDragAndDropMgr;
+      FDropTargetCtrl         : TWinControl;
+      FDragAndDropInitialized : boolean;
 
       // ICefClient
       FOnProcessMessageReceived       : TOnProcessMessageReceived;
@@ -175,6 +179,7 @@ type
       FOnFileDialog                   : TOnFileDialog;
 
       // ICefRenderHandler
+      FOnGetAccessibilityHandler      : TOnGetAccessibilityHandler;
       FOnGetRootScreenRect            : TOnGetRootScreenRect;
       FOnGetViewRect                  : TOnGetViewRect;
       FOnGetScreenPoint               : TOnGetScreenPoint;
@@ -206,6 +211,8 @@ type
       function  GetHasDocument : boolean;
       function  GetHasView : boolean;
       function  GetHasDevTools : boolean;
+      function  GetHasClientHandler : boolean;
+      function  GetHasBrowser : boolean;
       function  GetCanGoBack : boolean;
       function  GetCanGoForward : boolean;
       function  GetDocumentURL : string;
@@ -268,9 +275,15 @@ type
       procedure PrefsAvailableMsg(var aMessage : TMessage);
       function  GetParentForm : TCustomForm;
       procedure ApplyZoomStep;
+      procedure DelayedDragging;
       function  SendCompMessage(aMsg : cardinal; wParam : cardinal = 0; lParam : integer = 0) : boolean;
+      procedure ToMouseEvent(grfKeyState : Longint; pt : TPoint; var aMouseEvent : TCefMouseEvent);
       procedure WndProc(var aMessage: TMessage);
 
+      procedure DragDropManager_OnDragEnter(Sender: TObject; const aDragData : ICefDragData; grfKeyState: Longint; pt: TPoint; var dwEffect: Longint);
+      procedure DragDropManager_OnDragOver(Sender: TObject; grfKeyState: Longint; pt: TPoint; var dwEffect: Longint);
+      procedure DragDropManager_OnDragLeave(Sender: TObject);
+      procedure DragDropManager_OnDrop(Sender: TObject; grfKeyState: Longint; pt: TPoint; var dwEffect: Longint);
 
       // ICefClient
       function  doOnProcessMessageReceived(const browser: ICefBrowser; sourceProcess: TCefProcessId; const aMessage: ICefProcessMessage): Boolean; virtual;
@@ -346,10 +359,11 @@ type
       function  doOnFileDialog(const browser: ICefBrowser; mode: TCefFileDialogMode; const title, defaultFilePath: ustring; acceptFilters: TStrings; selectedAcceptFilter: Integer; const callback: ICefFileDialogCallback): Boolean; virtual;
 
       // ICefRenderHandler
-      function  doOnGetRootScreenRect(const browser: ICefBrowser; rect: PCefRect): Boolean; virtual;
-      function  doOnGetViewRect(const browser: ICefBrowser; rect: PCefRect): Boolean; virtual;
-      function  doOnGetScreenPoint(const browser: ICefBrowser; viewX, viewY: Integer; screenX, screenY: PInteger): Boolean; virtual;
-      function  doOnGetScreenInfo(const browser: ICefBrowser; screenInfo: PCefScreenInfo): Boolean; virtual;
+      procedure doOnGetAccessibilityHandler(var aAccessibilityHandler : ICefAccessibilityHandler); virtual;
+      function  doOnGetRootScreenRect(const browser: ICefBrowser; var rect: TCefRect): Boolean; virtual;
+      function  doOnGetViewRect(const browser: ICefBrowser; var rect: TCefRect): Boolean; virtual;
+      function  doOnGetScreenPoint(const browser: ICefBrowser; viewX, viewY: Integer; var screenX, screenY: Integer): Boolean; virtual;
+      function  doOnGetScreenInfo(const browser: ICefBrowser; var screenInfo: TCefScreenInfo): Boolean; virtual;
       procedure doOnPopupShow(const browser: ICefBrowser; show: Boolean); virtual;
       procedure doOnPopupSize(const browser: ICefBrowser; const rect: PCefRect); virtual;
       procedure doOnPaint(const browser: ICefBrowser; kind: TCefPaintElementType; dirtyRectsCount: NativeUInt; const dirtyRects: PCefRectArray; const buffer: Pointer; width, height: Integer); virtual;
@@ -370,9 +384,13 @@ type
       constructor Create(AOwner: TComponent); override;
       destructor  Destroy; override;
       procedure   AfterConstruction; override;
-      function    CreateClientHandler(aIsOSR : boolean) : boolean;
-      function    CreateBrowser(const aBrowserParent : TWinControl = nil; const aWindowName : string = '') : boolean;
+      function    CreateClientHandler(aIsOSR : boolean) : boolean; overload;
+      function    CreateClientHandler(var aClient : ICefClient) : boolean; overload;
       procedure   CloseBrowser(aForceClose : boolean);
+      function    CreateBrowser(const aBrowserParent : TWinControl = nil; const aWindowName : string = '') : boolean; overload;
+      function    CreateBrowser(aParentHandle : HWND; aParentRect : TRect; const aWindowName : string = '') : boolean; overload;
+      procedure   InitializeDragAndDrop(const aDropTargetCtrl : TWinControl);
+      procedure   ShutdownDragAndDrop;
 
       // Internal procedures.
       // Only tasks, visitors or callbacks should use them in the right thread/process.
@@ -385,6 +403,8 @@ type
 
       procedure   LoadURL(const aURL : ustring);
       procedure   LoadString(const aString : ustring; const aURL : ustring = '');
+      procedure   LoadRequest(const aRequest: ICefRequest);
+
       procedure   GoBack;
       procedure   GoForward;
       procedure   Reload;
@@ -398,6 +418,7 @@ type
       procedure   ExecuteJavaScript(const aCode, aScriptURL : ustring; aStartLine : integer = 0);
       procedure   UpdatePreferences;
       procedure   SavePreferences(const aFileName : string);
+      function    SetNewBrowserParent(aNewParentHwnd : HWND) : boolean;
 
       procedure   ShowDevTools(inspectElementAt: TPoint; const aDevTools : TWinControl);
       procedure   CloseDevTools(const aDevTools : TWinControl = nil);
@@ -440,6 +461,14 @@ type
       procedure   SendCaptureLostEvent;
       function    SendProcessMessage(targetProcess: TCefProcessId; const ProcMessage: ICefProcessMessage): Boolean;
       procedure   SetFocus(focus: Boolean);
+      procedure   SetAccessibilityState(accessibilityState: TCefState);
+
+      procedure   DragTargetDragEnter(const dragData: ICefDragData; const event: PCefMouseEvent; allowedOps: TCefDragOperations);
+      procedure   DragTargetDragOver(const event: PCefMouseEvent; allowedOps: TCefDragOperations);
+      procedure   DragTargetDragLeave;
+      procedure   DragTargetDrop(event: PCefMouseEvent);
+      procedure   DragSourceEndedAt(x, y: Integer; op: TCefDragOperation);
+      procedure   DragSourceSystemDragEnded;
 
 
       property  DefaultUrl              : ustring                      read FDefaultUrl               write FDefaultUrl;
@@ -456,6 +485,8 @@ type
       property  HasDocument             : boolean                      read GetHasDocument;
       property  HasView                 : boolean                      read GetHasView;
       property  HasDevTools             : boolean                      read GetHasDevTools;
+      property  HasClientHandler        : boolean                      read GetHasClientHandler;
+      property  HasBrowser              : boolean                      read GetHasBrowser;
       property  CanGoBack               : boolean                      read GetCanGoBack;
       property  CanGoForward            : boolean                      read GetCanGoForward;
       property  IsPopUp                 : boolean                      read GetIsPopUp;
@@ -477,6 +508,7 @@ type
       property  SendReferrer            : boolean                      read FSendReferrer             write SetSendReferrer;
       property  HyperlinkAuditing       : boolean                      read FHyperlinkAuditing        write SetHyperlinkAuditing;
       property  HasValidMainFrame       : boolean                      read GetHasValidMainFrame;
+      property  DragOperations          : TCefDragOperations           read FDragOperations           write FDragOperations;
 
       property  ProxyType               : integer                      read FProxyType                write SetProxyType;
       property  ProxyServer             : string                       read FProxyServer              write SetProxyServer;
@@ -566,6 +598,7 @@ type
       property OnFileDialog                     : TOnFileDialog                     read FOnFileDialog                     write FOnFileDialog;
 
       // ICefRenderHandler
+      property OnGetAccessibilityHandler        : TOnGetAccessibilityHandler        read FOnGetAccessibilityHandler        write FOnGetAccessibilityHandler;
       property OnGetRootScreenRect              : TOnGetRootScreenRect              read FOnGetRootScreenRect              write FOnGetRootScreenRect;
       property OnGetViewRect                    : TOnGetViewRect                    read FOnGetViewRect                    write FOnGetViewRect;
       property OnGetScreenPoint                 : TOnGetScreenPoint                 read FOnGetScreenPoint                 write FOnGetScreenPoint;
@@ -597,46 +630,49 @@ uses
   SysUtils, Math,
   {$ENDIF}
   uCEFBrowser, uCEFValue, uCEFDictionaryValue, uCEFStringMultimap, uCEFCookieManager, uCEFFrame,
-  uCEFApplication, uCEFProcessMessage;
+  uCEFApplication, uCEFProcessMessage, uOLEDragAndDrop;
 
 constructor TChromium.Create(AOwner: TComponent);
 begin
-  FBrowser               := nil;
-  FBrowserId             := 0;
-  FCompHandle            := 0;
-  FClosing               := False;
-  FInitialized           := False;
-  FIsOSR                 := False;
-  FDefaultUrl            := 'about:blank';
-  FClientHandler         := nil;
-  FHandler               := nil;
-  FOptions               := nil;
-  FFontOptions           := nil;
-  FDefaultEncoding       := '';
-  FVisitor               := nil;
-  FPDFPrintcb            := nil;
-  FCookiDeletercb        := nil;
-  FPDFPrintOptions       := nil;
-  FUpdatePreferences     := False;
-  FCustomHeaderName      := '';
-  FCustomHeaderValue     := '';
-  FPrefsFileName         := '';
-  FAddCustomHeader       := False;
-  FDoNotTrack            := True;
-  FSendReferrer          := True;
-  FHyperlinkAuditing     := False;
-  FCookiePrefs           := CEF_CONTENT_SETTING_ALLOW;
-  FImagesPrefs           := CEF_CONTENT_SETTING_ALLOW;
-  FZoomStep              := ZOOM_STEP_DEF;
-  FWindowName            := '';
+  FBrowser                := nil;
+  FBrowserId              := 0;
+  FCompHandle             := 0;
+  FClosing                := False;
+  FInitialized            := False;
+  FIsOSR                  := False;
+  FDefaultUrl             := 'about:blank';
+  FHandler                := nil;
+  FOptions                := nil;
+  FFontOptions            := nil;
+  FDefaultEncoding        := '';
+  FVisitor                := nil;
+  FPDFPrintcb             := nil;
+  FCookiDeletercb         := nil;
+  FPDFPrintOptions        := nil;
+  FUpdatePreferences      := False;
+  FCustomHeaderName       := '';
+  FCustomHeaderValue      := '';
+  FPrefsFileName          := '';
+  FAddCustomHeader        := False;
+  FDoNotTrack             := True;
+  FSendReferrer           := True;
+  FHyperlinkAuditing      := False;
+  FCookiePrefs            := CEF_CONTENT_SETTING_ALLOW;
+  FImagesPrefs            := CEF_CONTENT_SETTING_ALLOW;
+  FZoomStep               := ZOOM_STEP_DEF;
+  FWindowName             := '';
+  FDragOperations         := DRAG_OPERATION_NONE;
+  FDragDropManager        := nil;
+  FDropTargetCtrl         := nil;
+  FDragAndDropInitialized := False;
 
-  FProxyType             := CEF_PROXYTYPE_DIRECT;
-  FProxyServer           := '';
-  FProxyPort             := 80;
-  FProxyUsername         := '';
-  FProxyPassword         := '';
-  FProxyScriptURL        := '';
-  FProxyByPassList       := '';
+  FProxyType         := CEF_PROXYTYPE_DIRECT;
+  FProxyServer       := '';
+  FProxyPort         := 80;
+  FProxyUsername     := '';
+  FProxyPassword     := '';
+  FProxyScriptURL    := '';
+  FProxyByPassList   := '';
 
   FillChar(FWindowInfo,    SizeOf(TCefWindowInfo), 0);
   FillChar(FDevWindowInfo, SizeOf(TCefWindowInfo), 0);
@@ -653,8 +689,7 @@ destructor TChromium.Destroy;
 begin
   try
     try
-      FBrowser    := nil;
-      FBrowserId  := 0;
+      if (FDragDropManager <> nil) then FreeAndNil(FDragDropManager);
 
       if (FCompHandle <> 0) then
         begin
@@ -662,19 +697,9 @@ begin
           FCompHandle := 0;
         end;
 
-      if (FHandler <> nil) then
-        begin
-          (FHandler as ICefClientHandler).Disconnect;
-          FHandler := nil;
-        end;
-
-      if (FClientHandler <> nil) then
-        begin
-          FClientHandler.Disconnect;
-          FClientHandler.ReleaseOtherInstances;
-          FClientHandler := nil;
-        end;
-
+      FBrowser        := nil;
+      FBrowserId      := 0;
+      FHandler        := nil;
       FVisitor        := nil;
       FPDFPrintcb     := nil;
       FCookiDeletercb := nil;
@@ -684,7 +709,7 @@ begin
       if (FPDFPrintOptions <> nil) then FreeAndNil(FPDFPrintOptions);
     except
       on e : exception do
-        OutputDebugMessage('TChromium.Destroy error: ' + e.Message);
+        if CustomExceptionHandler('TChromium.Destroy', e) then raise;
     end;
   finally
     inherited Destroy;
@@ -705,7 +730,7 @@ begin
       end;
   except
     on e : exception do
-      OutputDebugMessage('TChromium.AfterConstruction error: ' + e.Message);
+      if CustomExceptionHandler('TChromium.AfterConstruction', e) then raise;
   end;
 end;
 
@@ -714,17 +739,27 @@ begin
   Result := False;
 
   try
-    if (FClientHandler = nil) then
+    if (FHandler = nil) then
       begin
-        FIsOSR           := aIsOsr;
-        FClientHandler   := TVCLClientHandler.Create(Self, FIsOSR);
-        FHandler         := FClientHandler as ICefClient;
-        Result           := (FHandler <> nil);
+        FIsOSR   := aIsOsr;
+        FHandler := TVCLClientHandler.Create(Self, FIsOSR);
+        Result   := True;
       end;
   except
     on e : exception do
-      OutputDebugMessage('TChromium.CreateClientHandler error: ' + e.Message);
+      if CustomExceptionHandler('TChromium.CreateClientHandler', e) then raise;
   end;
+end;
+
+function TChromium.CreateClientHandler(var aClient : ICefClient) : boolean;
+begin
+  if CreateClientHandler(True) then
+    begin
+      aClient := FHandler;
+      Result  := True;
+    end
+   else
+    Result := False;
 end;
 
 procedure TChromium.InitializeEvents;
@@ -803,6 +838,7 @@ begin
   FOnFileDialog                   := nil;
 
   // ICefRenderHandler
+  FOnGetAccessibilityHandler      := nil;
   FOnGetRootScreenRect            := nil;
   FOnGetViewRect                  := nil;
   FOnGetScreenPoint               := nil;
@@ -831,22 +867,42 @@ begin
 end;
 
 function TChromium.CreateBrowser(const aBrowserParent : TWinControl; const aWindowName : string) : boolean;
+var
+  TempHandle : HWND;
+  TempRect : TRect;
+begin
+  if (aBrowserParent <> nil) then
+    begin
+      TempHandle := aBrowserParent.Handle;
+      TempRect   := aBrowserParent.ClientRect;
+    end
+   else
+    begin
+      TempHandle := 0;
+      TempRect   := rect(0, 0, 0, 0);
+    end;
+
+  Result := CreateBrowser(TempHandle, TempRect, aWindowName);
+end;
+
+function TChromium.CreateBrowser(aParentHandle : HWND; aParentRect : TRect; const aWindowName : string = '') : boolean;
 begin
   Result := False;
 
   try
     if not(csDesigning in ComponentState) and
+       not(FClosing)         and
        (FBrowser     =  nil) and
        (FBrowserId   =  0)   and
        (GlobalCEFApp <> nil) and
-       CreateClientHandler(aBrowserParent = nil) then
+       CreateClientHandler(aParentHandle = 0) then
       begin
         GetSettings(FBrowserSettings);
 
         if FIsOSR then
-          WindowInfoAsWindowless(FWindowInfo, FCompHandle, False, aWindowName)
+          WindowInfoAsWindowless(FWindowInfo, FCompHandle, aWindowName)
          else
-          WindowInfoAsChild(FWindowInfo, aBrowserParent.Handle, aBrowserParent.ClientRect, aWindowName);
+          WindowInfoAsChild(FWindowInfo, aParentHandle, aParentRect, aWindowName);
 
 
         if MultithreadApp then
@@ -857,15 +913,119 @@ begin
 
             if (FBrowser <> nil) then
               begin
-                FBrowserId := FBrowser.Identifier;
-                Result     := True;
+                FBrowserId   := FBrowser.Identifier;
+                FInitialized := (FBrowserId <> 0);
+                Result       := True;
               end;
           end;
       end;
   except
     on e : exception do
-      OutputDebugMessage('TChromium.CreateBrowser error: ' + e.Message);
+      if CustomExceptionHandler('TChromium.CreateBrowser', e) then raise;
   end;
+end;
+
+procedure TChromium.InitializeDragAndDrop(const aDropTargetCtrl : TWinControl);
+var
+  TempDropTarget : IDropTarget;
+begin
+  if FIsOSR and
+     not(FDragAndDropInitialized) and
+     (FDragDropManager = nil) and
+     (aDropTargetCtrl <> nil) then
+    begin
+      FDropTargetCtrl                 := aDropTargetCtrl;
+
+      FDragDropManager                := TCEFDragAndDropMgr.Create;
+      FDragDropManager.OnDragEnter    := DragDropManager_OnDragEnter;
+      FDragDropManager.OnDragOver     := DragDropManager_OnDragOver;
+      FDragDropManager.OnDragLeave    := DragDropManager_OnDragLeave;
+      FDragDropManager.OnDrop         := DragDropManager_OnDrop;
+
+      TempDropTarget                  := TOLEDropTarget.Create(FDragDropManager);
+
+      RegisterDragDrop(FDropTargetCtrl.Handle, TempDropTarget);
+
+      FDragAndDropInitialized := True;
+    end;
+end;
+
+procedure TChromium.ShutdownDragAndDrop;
+begin
+  if FDragAndDropInitialized and (FDropTargetCtrl <> nil) then
+    begin
+      RevokeDragDrop(FDropTargetCtrl.Handle);
+      FDragAndDropInitialized := False;
+    end;
+end;
+
+procedure TChromium.ToMouseEvent(grfKeyState : Longint; pt : TPoint; var aMouseEvent : TCefMouseEvent);
+begin
+  if (FDropTargetCtrl <> nil) then
+    begin
+      pt                    := FDropTargetCtrl.ScreenToClient(pt);
+      aMouseEvent.x         := pt.x;
+      aMouseEvent.y         := pt.y;
+      aMouseEvent.modifiers := GetCefMouseModifiers(grfKeyState);
+    end;
+end;
+
+procedure TChromium.DragDropManager_OnDragEnter(Sender: TObject; const aDragData : ICefDragData; grfKeyState: Longint; pt: TPoint; var dwEffect: Longint);
+var
+  TempMouseEvent : TCefMouseEvent;
+  TempAllowedOps : TCefDragOperations;
+begin
+  if (GlobalCEFApp <> nil) then
+    begin
+      ToMouseEvent(grfKeyState, pt, TempMouseEvent);
+      DropEffectToDragOperation(dwEffect, TempAllowedOps);
+      DeviceToLogical(TempMouseEvent, GlobalCEFApp.DeviceScaleFactor);
+
+      DragTargetDragEnter(aDragData, @TempMouseEvent, TempAllowedOps);
+      DragTargetDragOver(@TempMouseEvent, TempAllowedOps);
+
+      DragOperationToDropEffect(FDragOperations, dwEffect);
+    end;
+end;
+
+procedure TChromium.DragDropManager_OnDragOver(Sender: TObject; grfKeyState: Longint; pt: TPoint; var dwEffect: Longint);
+var
+  TempMouseEvent : TCefMouseEvent;
+  TempAllowedOps : TCefDragOperations;
+begin
+  if (GlobalCEFApp <> nil) then
+    begin
+      ToMouseEvent(grfKeyState, pt, TempMouseEvent);
+      DropEffectToDragOperation(dwEffect, TempAllowedOps);
+      DeviceToLogical(TempMouseEvent, GlobalCEFApp.DeviceScaleFactor);
+
+      DragTargetDragOver(@TempMouseEvent, TempAllowedOps);
+
+      DragOperationToDropEffect(FDragOperations, dwEffect);
+    end;
+end;
+
+procedure TChromium.DragDropManager_OnDragLeave(Sender: TObject);
+begin
+  DragTargetDragLeave;
+end;
+
+procedure TChromium.DragDropManager_OnDrop(Sender: TObject; grfKeyState: Longint; pt: TPoint; var dwEffect: Longint);
+var
+  TempMouseEvent : TCefMouseEvent;
+  TempAllowedOps : TCefDragOperations;
+begin
+  if (GlobalCEFApp <> nil) then
+    begin
+      ToMouseEvent(grfKeyState, pt, TempMouseEvent);
+      DropEffectToDragOperation(dwEffect, TempAllowedOps);
+      DeviceToLogical(TempMouseEvent, GlobalCEFApp.DeviceScaleFactor);
+
+      DragTargetDragOver(@TempMouseEvent, TempAllowedOps);
+      DragTargetDrop(@TempMouseEvent);
+
+      DragOperationToDropEffect(FDragOperations, dwEffect);
+    end;
 end;
 
 procedure TChromium.CloseBrowser(aForceClose : boolean);
@@ -881,7 +1041,7 @@ var
   TempURL : TCefString;
 begin
   TempURL := CefString(aURL);
-  Result  := cef_browser_host_create_browser(aWindowInfo, FClientHandler.Wrap, @TempURL, aSettings, CefGetData(aContext)) <> 0;
+  Result  := cef_browser_host_create_browser(aWindowInfo, FHandler.Wrap, @TempURL, aSettings, CefGetData(aContext)) <> 0;
 end;
 
 function TChromium.CreateBrowserHostSync(aWindowInfo     : PCefWindowInfo;
@@ -893,7 +1053,7 @@ var
   TempBrowser : PCefBrowser;
 begin
   TempURL     := CefString(aURL);
-  TempBrowser := cef_browser_host_create_browser_sync(aWindowInfo, FClientHandler.Wrap, @TempURL, aSettings, CefGetData(aContext));
+  TempBrowser := cef_browser_host_create_browser_sync(aWindowInfo, FHandler.Wrap, @TempURL, aSettings, CefGetData(aContext));
   Result      := TCefBrowserRef.UnWrap(TempBrowser);
 end;
 
@@ -1055,7 +1215,6 @@ begin
       aSettings.remote_fonts                    := FFontOptions.RemoteFonts;
       aSettings.default_encoding                := CefString(DefaultEncoding);
       aSettings.javascript                      := FOptions.Javascript;
-      aSettings.javascript_open_windows         := FOptions.JavascriptOpenWindows;
       aSettings.javascript_close_windows        := FOptions.JavascriptCloseWindows;
       aSettings.javascript_access_clipboard     := FOptions.JavascriptAccessClipboard;
       aSettings.javascript_dom_paste            := FOptions.JavascriptDomPaste;
@@ -1093,7 +1252,6 @@ begin
   aSettings.remote_fonts                    := STATE_DEFAULT;
   aSettings.default_encoding                := CefString('');
   aSettings.javascript                      := STATE_DEFAULT;
-  aSettings.javascript_open_windows         := STATE_DEFAULT;
   aSettings.javascript_close_windows        := STATE_DEFAULT;
   aSettings.javascript_access_clipboard     := STATE_DEFAULT;
   aSettings.javascript_dom_paste            := STATE_DEFAULT;
@@ -1132,6 +1290,17 @@ begin
     begin
       TempFrame := FBrowser.MainFrame;
       if (TempFrame <> nil) then TempFrame.LoadString(aString, aURL);
+    end;
+end;
+
+procedure TChromium.LoadRequest(const aRequest: ICefRequest);
+var
+  TempFrame : ICefFrame;
+begin
+  if Initialized then
+    begin
+      TempFrame := FBrowser.MainFrame;
+      if (TempFrame <> nil) then TempFrame.LoadRequest(aRequest);
     end;
 end;
 
@@ -1178,7 +1347,7 @@ begin
     if (GlobalCEFApp <> nil) then Result := GlobalCEFApp.MultiThreadedMessageLoop;
   except
     on e : exception do
-      OutputDebugMessage('TChromium.GetMultithreadApp error: ' + e.Message);
+      if CustomExceptionHandler('TChromium.GetMultithreadApp', e) then raise;
   end;
 end;
 
@@ -1195,6 +1364,16 @@ end;
 function TChromium.GetHasDevTools : boolean;
 begin
   Result := Initialized and FBrowser.Host.HasDevTools;
+end;
+
+function TChromium.GetHasClientHandler : boolean;
+begin
+  Result := (FHandler <> nil);
+end;
+
+function TChromium.GetHasBrowser : boolean;
+begin
+  Result := (FBrowser <> nil);
 end;
 
 function TChromium.GetWindowHandle : THandle;
@@ -1543,6 +1722,19 @@ begin
     end;
 end;
 
+function TChromium.SetNewBrowserParent(aNewParentHwnd : HWND) : boolean;
+var
+  TempHandle : HWND;
+begin
+  Result := False;
+
+  if Initialized then
+    begin
+      TempHandle := FBrowser.Host.WindowHandle;
+      Result     := (TempHandle <> 0) and (SetParent(TempHandle, aNewParentHwnd) <> 0);
+    end;
+end;
+
 procedure TChromium.SimulateMouseWheel(aDeltaX, aDeltaY : integer);
 var
   TempEvent : TCefMouseEvent;
@@ -1551,7 +1743,7 @@ begin
     begin
       TempEvent.x         := 0;
       TempEvent.y         := 0;
-      TempEvent.modifiers := [];
+      TempEvent.modifiers := EVENTFLAG_NONE;
       FBrowser.Host.SendMouseWheelEvent(@TempEvent, aDeltaX, aDeltaY);
     end;
 end;
@@ -1603,7 +1795,6 @@ begin
               if (length(FProxyByPassList) > 0) then TempDict.SetString('bypass_list', FProxyByPassList);
             end;
 
-
           CEF_PROXYTYPE_PAC_SCRIPT :
             begin
               TempValue.SetString('pac_script');
@@ -1626,7 +1817,7 @@ begin
       end;
   except
     on e : exception do
-      OutputDebugMessage('TChromium.UpdateProxyPrefs error: ' + e.Message);
+      if CustomExceptionHandler('TChromium.UpdateProxyPrefs', e) then raise;
   end;
 end;
 
@@ -1654,7 +1845,7 @@ begin
       end;
   except
     on e : exception do
-      OutputDebugMessage('TChromium.UpdatePreference error: ' + e.Message);
+      if CustomExceptionHandler('TChromium.UpdatePreference', e) then raise;
   end;
 end;
 
@@ -1677,7 +1868,7 @@ begin
       end;
   except
     on e : exception do
-      OutputDebugMessage('TChromium.UpdatePreference error: ' + e.Message);
+      if CustomExceptionHandler('TChromium.UpdatePreference', e) then raise;
   end;
 end;
 
@@ -1700,7 +1891,7 @@ begin
       end;
   except
     on e : exception do
-      OutputDebugMessage('TChromium.UpdatePreference error: ' + e.Message);
+      if CustomExceptionHandler('TChromium.UpdatePreference', e) then raise;
   end;
 end;
 
@@ -1723,7 +1914,7 @@ begin
       end;
   except
     on e : exception do
-      OutputDebugMessage('TChromium.UpdatePreference error: ' + e.Message);
+      if CustomExceptionHandler('TChromium.UpdatePreference', e) then raise;
   end;
 end;
 
@@ -1947,7 +2138,7 @@ begin
         end;
     except
       on e : exception do
-        OutputDebugMessage('TChromium.HandleDictionary error: ' + e.Message);
+        if CustomExceptionHandler('TChromium.HandleDictionary', e) then raise;
     end;
   finally
     if (TempKeys <> nil) then TempKeys.Free;
@@ -1973,7 +2164,7 @@ begin
         end;
     except
       on e : exception do
-        OutputDebugMessage('TChromium.Internal_SavePreferences error: ' + e.Message);
+        if CustomExceptionHandler('TChromium.Internal_SavePreferences', e) then raise;
     end;
   finally
     if (TempPrefs <> nil) then FreeAndNil(TempPrefs);
@@ -2009,7 +2200,7 @@ begin
       end;
   except
     on e : exception do
-      OutputDebugMessage('TChromium.ExecuteJavaScript error: ' + e.Message);
+      if CustomExceptionHandler('TChromium.ExecuteJavaScript', e) then raise;
   end;
 end;
 
@@ -2070,6 +2261,7 @@ procedure TChromium.WndProc(var aMessage: TMessage);
 begin
   case aMessage.Msg of
     CEF_PREFERENCES_SAVED : PrefsAvailableMsg(aMessage);
+    CEF_STARTDRAGGING     : DelayedDragging;
 
     else aMessage.Result := DefWindowProc(FCompHandle, aMessage.Msg, aMessage.WParam, aMessage.LParam);
   end;
@@ -2079,9 +2271,22 @@ function TChromium.doOnClose(const browser: ICefBrowser): Boolean;
 begin
   Result := False;
 
-  if Assigned(FOnClose) then FOnClose(Self, browser, Result);
-
   if (browser <> nil) and (FBrowserId = browser.Identifier) then FClosing := True;
+
+  if Assigned(FOnClose) then FOnClose(Self, browser, Result);
+end;
+
+procedure TChromium.doOnBeforeClose(const browser: ICefBrowser);
+begin
+  if (browser <> nil) and (FBrowserId = browser.Identifier) then
+    begin
+      FInitialized := False;
+      FBrowser     := nil;
+      FBrowserId   := 0;
+      FHandler     := nil;
+    end;
+
+  if Assigned(FOnBeforeClose) then FOnBeforeClose(Self, browser);
 end;
 
 procedure TChromium.doOnAddressChange(const browser: ICefBrowser; const frame: ICefFrame; const url: ustring);
@@ -2114,18 +2319,6 @@ begin
   if FUpdatePreferences then Internal_UpdatePreferences;
 
   if Assigned(FOnBeforeBrowse) then FOnBeforeBrowse(Self, browser, frame, request, isRedirect, Result);
-end;
-
-procedure TChromium.doOnBeforeClose(const browser: ICefBrowser);
-begin
-  if (browser <> nil) and (FBrowserId = browser.Identifier) then
-    begin
-      FInitialized := False;
-      FBrowser     := nil;
-      FBrowserId   := 0;
-    end;
-
-  if Assigned(FOnBeforeClose) then FOnBeforeClose(Self, browser);
 end;
 
 procedure TChromium.doOnBeforeContextMenu(const browser : ICefBrowser;
@@ -2348,28 +2541,33 @@ begin
     FOnGetResourceHandler(Self, browser, frame, request, Result);
 end;
 
-function TChromium.doOnGetRootScreenRect(const browser: ICefBrowser; rect: PCefRect): Boolean;
+procedure TChromium.doOnGetAccessibilityHandler(var aAccessibilityHandler : ICefAccessibilityHandler);
+begin
+  if assigned(FOnGetAccessibilityHandler) then FOnGetAccessibilityHandler(Self, aAccessibilityHandler);
+end;
+
+function TChromium.doOnGetRootScreenRect(const browser: ICefBrowser; var rect: TCefRect): Boolean;
 begin
   Result := False;
 
   if Assigned(FOnGetRootScreenRect) then FOnGetRootScreenRect(Self, browser, rect, Result);
 end;
 
-function TChromium.doOnGetScreenInfo(const browser: ICefBrowser; screenInfo: PCefScreenInfo): Boolean;
+function TChromium.doOnGetScreenInfo(const browser: ICefBrowser; var screenInfo: TCefScreenInfo): Boolean;
 begin
   Result := False;
 
   if Assigned(FOnGetScreenInfo) then FOnGetScreenInfo(Self, browser, screenInfo, Result);
 end;
 
-function TChromium.doOnGetScreenPoint(const browser: ICefBrowser; viewX, viewY: Integer; screenX, screenY: PInteger): Boolean;
+function TChromium.doOnGetScreenPoint(const browser: ICefBrowser; viewX, viewY: Integer; var screenX, screenY: Integer): Boolean;
 begin
   Result := False;
 
   if Assigned(FOnGetScreenPoint) then FOnGetScreenPoint(Self, browser, viewX, viewY, screenX, screenY, Result);
 end;
 
-function TChromium.doOnGetViewRect(const browser: ICefBrowser; rect: PCefRect): Boolean;
+function TChromium.doOnGetViewRect(const browser: ICefBrowser; var rect: TCefRect): Boolean;
 begin
   Result := False;
 
@@ -2618,7 +2816,34 @@ function TChromium.doOnStartDragging(const browser    : ICefBrowser;
 begin
   Result := False;
 
+  if FDragAndDropInitialized and
+     FDragDropManager.CloneDragData(dragData, allowedOps) then
+    begin
+      Result := True;
+      SendCompMessage(CEF_STARTDRAGGING);
+    end;
+
   if Assigned(FOnStartDragging) then FOnStartDragging(Self, browser, dragData, allowedOps, x, y, Result);
+end;
+
+procedure TChromium.DelayedDragging;
+var
+  TempOperation : TCefDragOperation;
+  TempPoint     : TPoint;
+begin
+  if FDragAndDropInitialized and (FDropTargetCtrl <> nil) and (GlobalCEFApp <> nil) then
+    begin
+      FDragOperations := DRAG_OPERATION_NONE;
+      TempOperation   := FDragDropManager.StartDragging;
+      FDragOperations := DRAG_OPERATION_NONE;
+
+      GetCursorPos(TempPoint);
+      TempPoint := FDropTargetCtrl.ScreenToClient(TempPoint);
+      DeviceToLogical(TempPoint, GlobalCEFApp.DeviceScaleFactor);
+
+      DragSourceEndedAt(TempPoint.x, TempPoint.y, TempOperation);
+      DragSourceSystemDragEnded;
+    end;
 end;
 
 procedure TChromium.doOnStatusMessage(const browser: ICefBrowser; const value: ustring);
@@ -2645,6 +2870,8 @@ end;
 
 procedure TChromium.doOnUpdateDragCursor(const browser: ICefBrowser; operation: TCefDragOperation);
 begin
+  if FDragAndDropInitialized then FDragOperations := operation;
+
   if Assigned(FOnUpdateDragCursor) then FOnUpdateDragCursor(Self, browser, operation);
 end;
 
@@ -2814,9 +3041,44 @@ begin
   if Initialized then FBrowser.Host.SetFocus(focus);
 end;
 
+procedure TChromium.SetAccessibilityState(accessibilityState: TCefState);
+begin
+  if Initialized then FBrowser.Host.SetAccessibilityState(accessibilityState);
+end;
+
 function TChromium.SendProcessMessage(targetProcess: TCefProcessId; const ProcMessage: ICefProcessMessage): Boolean;
 begin
   Result := Initialized and FBrowser.SendProcessMessage(targetProcess, ProcMessage);
+end;
+
+procedure TChromium.DragTargetDragEnter(const dragData: ICefDragData; const event: PCefMouseEvent; allowedOps: TCefDragOperations);
+begin
+  if Initialized then FBrowser.Host.DragTargetDragEnter(dragData, event, allowedOps);
+end;
+
+procedure TChromium.DragTargetDragOver(const event: PCefMouseEvent; allowedOps: TCefDragOperations);
+begin
+  if Initialized then FBrowser.Host.DragTargetDragOver(event, allowedOps);
+end;
+
+procedure TChromium.DragTargetDragLeave;
+begin
+  if Initialized then FBrowser.Host.DragTargetDragLeave;
+end;
+
+procedure TChromium.DragTargetDrop(event: PCefMouseEvent);
+begin
+  if Initialized then FBrowser.Host.DragTargetDrop(event);
+end;
+
+procedure TChromium.DragSourceEndedAt(x, y: Integer; op: TCefDragOperation);
+begin
+  if Initialized then FBrowser.Host.DragSourceEndedAt(x, y, op);
+end;
+
+procedure TChromium.DragSourceSystemDragEnded;
+begin
+  if Initialized then FBrowser.Host.DragSourceSystemDragEnded;
 end;
 
 end.
