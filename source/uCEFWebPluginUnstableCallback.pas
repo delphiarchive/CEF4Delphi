@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -77,9 +77,14 @@ uses
 procedure cef_web_plugin_unstable_callback_is_unstable(self: PCefWebPluginUnstableCallback;
                                                        const path: PCefString;
                                                        unstable: Integer); stdcall;
+var
+  TempObject : TObject;
 begin
-  with TCefWebPluginUnstableCallbackOwn(CefGetObject(self)) do
-    IsUnstable(CefString(path), unstable <> 0);
+  TempObject := CefGetObject(self);
+
+  if (TempObject <> nil) and (TempObject is TCefWebPluginUnstableCallbackOwn) then
+    TCefWebPluginUnstableCallbackOwn(TempObject).IsUnstable(CefString(path),
+                                                            unstable <> 0);
 end;
 
 // TCefWebPluginUnstableCallbackOwn
@@ -100,6 +105,8 @@ end;
 
 constructor TCefFastWebPluginUnstableCallback.Create(const callback: TCefWebPluginIsUnstableProc);
 begin
+  inherited Create;
+
   FCallback := callback;
 end;
 

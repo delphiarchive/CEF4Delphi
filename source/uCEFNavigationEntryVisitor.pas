@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -73,38 +73,55 @@ implementation
 uses
   uCEFTypes, uCEFMiscFunctions, uCEFNavigationEntry;
 
-function cef_navigation_entry_visitor_visit(self: PCefNavigationEntryVisitor; entry: PCefNavigationEntry; current, index, total: Integer): Integer; stdcall;
+function cef_navigation_entry_visitor_visit(self    : PCefNavigationEntryVisitor;
+                                            entry   : PCefNavigationEntry;
+                                            current : Integer;
+                                            index   : Integer;
+                                            total   : Integer): Integer; stdcall;
+var
+  TempObject : TObject;
 begin
-  with TCefNavigationEntryVisitorOwn(CefGetObject(self)) do
-    Result := Ord(Visit(TCefNavigationEntryRef.UnWrap(entry), current <> 0, index, total));
+  Result     := Ord(False);
+  TempObject := CefGetObject(self);
+
+  if (TempObject <> nil) and (TempObject is TCefNavigationEntryVisitorOwn) then
+    Result := Ord(TCefNavigationEntryVisitorOwn(TempObject).Visit(TCefNavigationEntryRef.UnWrap(entry),
+                                                                  current <> 0,
+                                                                  index,
+                                                                  total));
 end;
 
 // TCefNavigationEntryVisitorOwn
 
 constructor TCefNavigationEntryVisitorOwn.Create;
 begin
-  CreateData(SizeOf(TCefNavigationEntryVisitor), False);
+  inherited CreateData(SizeOf(TCefNavigationEntryVisitor));
+
   with PCefNavigationEntryVisitor(FData)^ do
     visit := cef_navigation_entry_visitor_visit;
 end;
 
-function TCefNavigationEntryVisitorOwn.Visit(const entry: ICefNavigationEntry;
-  current: Boolean; index, total: Integer): Boolean;
+function TCefNavigationEntryVisitorOwn.Visit(const entry   : ICefNavigationEntry;
+                                                   current : Boolean;
+                                                   index   : Integer;
+                                                   total   : Integer): Boolean;
 begin
   Result:= False;
 end;
 
 // TCefFastNavigationEntryVisitor
 
-constructor TCefFastNavigationEntryVisitor.Create(
-  const proc: TCefNavigationEntryVisitorProc);
+constructor TCefFastNavigationEntryVisitor.Create(const proc: TCefNavigationEntryVisitorProc);
 begin
   FVisitor := proc;
+
   inherited Create;
 end;
 
-function TCefFastNavigationEntryVisitor.Visit(const entry: ICefNavigationEntry;
-  current: Boolean; index, total: Integer): Boolean;
+function TCefFastNavigationEntryVisitor.Visit(const entry   : ICefNavigationEntry;
+                                                    current : Boolean;
+                                                    index   : Integer;
+                                                    total   : Integer): Boolean;
 begin
   Result := FVisitor(entry, current, index, total);
 end;

@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -55,7 +55,7 @@ type
     function IsSame(const that: ICefTaskRunner): Boolean;
     function BelongsToCurrentThread: Boolean;
     function BelongsToThread(threadId: TCefThreadId): Boolean;
-    function PostTask(const task: ICefTask): Boolean; stdcall;
+    function PostTask(const task: ICefTask): Boolean;
     function PostDelayedTask(const task: ICefTask; delayMs: Int64): Boolean;
   public
     class function UnWrap(data: Pointer): ICefTaskRunner;
@@ -94,8 +94,7 @@ begin
   Result := PCefTaskRunner(FData).is_same(FData, CefGetData(that)) <> 0;
 end;
 
-function TCefTaskRunnerRef.PostDelayedTask(const task: ICefTask;
-  delayMs: Int64): Boolean;
+function TCefTaskRunnerRef.PostDelayedTask(const task: ICefTask; delayMs: Int64): Boolean;
 begin
   Result := PCefTaskRunner(FData).post_delayed_task(FData, CefGetData(task), delayMs) <> 0;
 end;
@@ -107,8 +106,9 @@ end;
 
 class function TCefTaskRunnerRef.UnWrap(data: Pointer): ICefTaskRunner;
 begin
-  if data <> nil then
-    Result := Create(data) as ICefTaskRunner else
+  if (data <> nil) then
+    Result := Create(data) as ICefTaskRunner
+   else
     Result := nil;
 end;
 

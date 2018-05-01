@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -83,11 +83,16 @@ type
 implementation
 
 uses
-  uCEFMiscFunctions, uCEFLibFunctions, uCEFTypes, uCEFDomDocument, uCEFChromium;
+  uCEFMiscFunctions, uCEFLibFunctions, uCEFTypes, uCEFDomDocument;
 
 procedure cef_dom_visitor_visite(self: PCefDomVisitor; document: PCefDomDocument); stdcall;
+var
+  TempObject : TObject;
 begin
-  TCefDomVisitorOwn(CefGetObject(self)).visit(TCefDomDocumentRef.UnWrap(document));
+  TempObject := CefGetObject(self);
+
+  if (TempObject <> nil) and (TempObject is TCefDomVisitorOwn) then
+    TCefDomVisitorOwn(TempObject).visit(TCefDomDocumentRef.UnWrap(document));
 end;
 
 // TCefDomVisitorOwn
@@ -96,7 +101,7 @@ constructor TCefDomVisitorOwn.Create;
 begin
   inherited CreateData(SizeOf(TCefDomVisitor));
 
-  with PCefDomVisitor(FData)^ do visit := cef_dom_visitor_visite;
+  PCefDomVisitor(FData).visit := cef_dom_visitor_visite;
 end;
 
 procedure TCefDomVisitorOwn.visit(const document: ICefDomDocument);

@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -48,9 +48,9 @@ interface
 
 uses
   {$IFDEF DELPHI16_UP}
-  System.Classes,
+  System.Classes, System.SysUtils,
   {$ELSE}
-  Classes,
+  Classes, SysUtils,
   {$ENDIF}
   uCEFBaseRefCounted, uCEFInterfaces, uCEFTypes;
 
@@ -85,29 +85,25 @@ type
 implementation
 
 uses
-  uCEFMiscFunctions, uCEFLibFunctions;
+  uCEFMiscFunctions, uCEFLibFunctions, uCEFStringList;
 
 
-function TCefContextMenuParamsRef.GetDictionarySuggestions(
-  const suggestions: TStringList): Boolean;
+function TCefContextMenuParamsRef.GetDictionarySuggestions(const suggestions : TStringList): Boolean;
 var
-  list: TCefStringList;
-  i: Integer;
-  str: TCefString;
+  TempSL : ICefStringList;
 begin
-  list := cef_string_list_alloc;
-  try
-    Result := PCefContextMenuParams(FData).get_dictionary_suggestions(PCefContextMenuParams(FData), list) <> 0;
-    FillChar(str, SizeOf(str), 0);
-    for i := 0 to cef_string_list_size(list) - 1 do
+  Result := False;
+
+  if (suggestions <> nil) then
     begin
-      FillChar(str, SizeOf(str), 0);
-      cef_string_list_value(list, i, @str);
-      suggestions.Add(CefStringClearAndGet(str));
+      TempSL := TCefStringListOwn.Create;
+
+      if (PCefContextMenuParams(FData).get_dictionary_suggestions(PCefContextMenuParams(FData), TempSL.Handle) <> 0) then
+        begin
+          TempSL.CopyToStrings(suggestions);
+          Result := True;
+        end;
     end;
-  finally
-    cef_string_list_free(list);
-  end;
 end;
 
 function TCefContextMenuParamsRef.GetEditStateFlags: TCefContextMenuEditStateFlags;
@@ -210,11 +206,11 @@ begin
   Result := PCefContextMenuParams(FData).has_image_contents(PCefContextMenuParams(FData)) <> 0;
 end;
 
-class function TCefContextMenuParamsRef.UnWrap(
-  data: Pointer): ICefContextMenuParams;
+class function TCefContextMenuParamsRef.UnWrap(data: Pointer): ICefContextMenuParams;
 begin
-  if data <> nil then
-    Result := Create(data) as ICefContextMenuParams else
+  if (data <> nil) then
+    Result := Create(data) as ICefContextMenuParams
+   else
     Result := nil;
 end;
 

@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -52,6 +52,12 @@ uses
 
 begin
   GlobalCEFApp := TCefApplication.Create;
+
+  // The main process and the subprocess *MUST* have the same FrameworkDirPath, ResourcesDirPath,
+  // LocalesDirPath, cache, cookies and UserDataPath paths
+
+  // The demos are compiled into the BIN directory. Make sure SubProcess.exe and SimpleBrowser.exe are in that
+  // directory or this demo won't work.
 
   // In case you want to use custom directories for the CEF3 binaries, cache, cookies and user data.
 {

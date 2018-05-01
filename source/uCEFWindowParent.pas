@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -48,9 +48,9 @@ interface
 
 uses
   {$IFDEF DELPHI16_UP}
-  WinApi.Windows, WinApi.Messages, System.Classes, Vcl.Controls,
+  {$IFDEF MSWINDOWS}WinApi.Windows, WinApi.Messages, Vcl.Controls, Vcl.Graphics,{$ENDIF} System.Classes,
   {$ELSE}
-  Windows, Messages, Classes, Controls,
+  Windows, Messages, Classes, Controls, Graphics,
   {$ENDIF}
   uCEFTypes, uCEFInterfaces;
 
@@ -60,10 +60,14 @@ type
       function  GetChildWindowHandle : THandle; virtual;
 
       procedure WndProc(var aMessage: TMessage); override;
-      procedure Resize; override;
 
     public
       procedure UpdateSize;
+      function  TakeSnapshot(var aBitmap : TBitmap) : boolean;
+      function  DestroyChildWindow : boolean;
+      procedure CreateHandle; override;
+      procedure Resize; override;
+
       property  ChildWindowHandle : THandle   read GetChildWindowHandle;
 
     published
@@ -74,6 +78,8 @@ type
       property  TabStop;
       property  TabOrder;
       property  Visible;
+      property  ShowHint;
+      property  Hint;
   end;
 
 implementation
@@ -93,6 +99,11 @@ begin
   UpdateSize;
 end;
 
+procedure TCEFWindowParent.CreateHandle;
+begin
+  inherited;
+end;
+
 procedure TCEFWindowParent.UpdateSize;
 var
   TempRect : TRect;
@@ -106,7 +117,7 @@ begin
   hdwp     := BeginDeferWindowPos(1);
 
   try
-    hdwp := DeferWindowPos(hdwp, TempHandle, 0,
+    hdwp := DeferWindowPos(hdwp, TempHandle, HWND_TOP,
                            TempRect.left, TempRect.top, TempRect.right - TempRect.left, TempRect.bottom - TempRect.top,
                            SWP_NOZORDER);
   finally
@@ -142,6 +153,43 @@ begin
 
     else inherited WndProc(aMessage);
   end;
+end;
+
+function TCEFWindowParent.TakeSnapshot(var aBitmap : TBitmap) : boolean;
+var
+  TempHWND   : HWND;
+  TempDC     : HDC;
+  TempRect   : TRect;
+  TempWidth  : Integer;
+  TempHeight : Integer;
+begin
+  Result   := False;
+  TempHWND := ChildWindowHandle;
+
+  if (TempHWND <> 0) then
+    begin
+      {$IFDEF DELPHI16_UP}Winapi.{$ENDIF}Windows.GetClientRect(TempHWND, TempRect);
+      TempDC     := GetDC(TempHWND);
+      TempWidth  := TempRect.Right  - TempRect.Left;
+      TempHeight := TempRect.Bottom - TempRect.Top;
+
+      aBitmap        := TBitmap.Create;
+      aBitmap.Height := TempHeight;
+      aBitmap.Width  := TempWidth;
+
+      Result := BitBlt(aBitmap.Canvas.Handle, 0, 0, TempWidth, TempHeight,
+                       TempDC, 0, 0, SRCCOPY);
+
+      ReleaseDC(TempHWND, TempDC);
+    end;
+end;
+
+function TCEFWindowParent.DestroyChildWindow : boolean;
+var
+  TempHWND : HWND;
+begin
+  TempHWND := ChildWindowHandle;
+  Result   := (TempHWND <> 0) and DestroyWindow(TempHWND);
 end;
 
 end.

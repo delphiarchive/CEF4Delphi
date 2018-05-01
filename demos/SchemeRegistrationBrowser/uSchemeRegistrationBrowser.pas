@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -50,11 +50,10 @@ uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Menus,
   Controls, Forms, Dialogs, StdCtrls, ExtCtrls, Types, ComCtrls, ClipBrd,
   {$ENDIF}
-  uCEFChromium, uCEFWindowParent, uCEFInterfaces, uCEFApplication, uCEFTypes, uCEFConstants;
+  uCEFChromium, uCEFWindowParent, uCEFInterfaces, uCEFApplication, uCEFSchemeRegistrar,
+  uCEFTypes, uCEFConstants;
 
 const
-  MINIBROWSER_CREATED        = WM_APP + $100;
-
   MINIBROWSER_CONTEXTMENU_REGSCHEME    = MENU_ID_USER_FIRST + 1;
   MINIBROWSER_CONTEXTMENU_CLEARFACT    = MENU_ID_USER_FIRST + 2;
 
@@ -65,6 +64,7 @@ type
     CEFWindowParent1: TCEFWindowParent;
     Chromium1: TChromium;
     AddressCbx: TComboBox;
+    Timer1: TTimer;
     procedure Chromium1AfterCreated(Sender: TObject;
       const browser: ICefBrowser);
     procedure Chromium1BeforeContextMenu(Sender: TObject;
@@ -76,12 +76,33 @@ type
       eventFlags: Cardinal; out Result: Boolean);
     procedure GoBtnClick(Sender: TObject);
     procedure FormShow(Sender: TObject);
+    procedure Timer1Timer(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
+    procedure Chromium1BeforePopup(Sender: TObject;
+      const browser: ICefBrowser; const frame: ICefFrame; const targetUrl,
+      targetFrameName: ustring;
+      targetDisposition: TCefWindowOpenDisposition; userGesture: Boolean;
+      const popupFeatures: TCefPopupFeatures; var windowInfo: TCefWindowInfo;
+      var client: ICefClient; var settings: TCefBrowserSettings;
+      var noJavascriptAccess: Boolean; var Result: Boolean);
+    procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
+    procedure Chromium1Close(Sender: TObject; const browser: ICefBrowser;
+      out Result: Boolean);
+    procedure Chromium1BeforeClose(Sender: TObject;
+      const browser: ICefBrowser);
   private
     { Private declarations }
   protected
-    procedure BrowserCreatedMsg(var aMessage : TMessage); message MINIBROWSER_CREATED;
+    // Variables to control when can we destroy the form safely
+    FCanClose : boolean;  // Set to True in TChromium.OnBeforeClose
+    FClosing  : boolean;  // Set to True in the CloseQuery event.
+
+    procedure BrowserCreatedMsg(var aMessage : TMessage); message CEF_AFTERCREATED;
+    procedure BrowserDestroyMsg(var aMessage : TMessage); message CEF_DESTROY;
     procedure WMMove(var aMessage : TWMMove); message WM_MOVE;
     procedure WMMoving(var aMessage : TMessage); message WM_MOVING;
+    procedure WMEnterMenuLoop(var aMessage: TMessage); message WM_ENTERMENULOOP;
+    procedure WMExitMenuLoop(var aMessage: TMessage); message WM_EXITMENULOOP;
   public
     { Public declarations }
   end;
@@ -89,17 +110,36 @@ type
 var
   SchemeRegistrationBrowserFrm: TSchemeRegistrationBrowserFrm;
 
+procedure GlobalCEFApp_OnRegCustomSchemes(const registrar: TCefSchemeRegistrarRef);
+
 implementation
 
 {$R *.dfm}
 
 uses
-  uCEFSchemeHandlerFactory, uHelloScheme;
+  uCEFSchemeHandlerFactory, uCEFMiscFunctions, uHelloScheme;
 
-procedure TSchemeRegistrationBrowserFrm.Chromium1AfterCreated(
+// Destruction steps
+// =================
+// 1. FormCloseQuery sets CanClose to FALSE calls TChromium.CloseBrowser which triggers the TChromium.OnClose event.
+// 2. TChromium.OnClose sends a CEFBROWSER_DESTROY message to destroy CEFWindowParent1 in the main thread, which triggers the TChromium.OnBeforeClose event.
+// 3. TChromium.OnBeforeClose sets FCanClose := True and sends WM_CLOSE to the form.
+
+procedure GlobalCEFApp_OnRegCustomSchemes(const registrar: TCefSchemeRegistrarRef);
+begin
+  registrar.AddCustomScheme('hello', True, True, False, False, False, False);
+end;
+
+procedure TSchemeRegistrationBrowserFrm.Chromium1AfterCreated(Sender: TObject; const browser: ICefBrowser);
+begin
+  PostMessage(Handle, CEF_AFTERCREATED, 0, 0);
+end;
+
+procedure TSchemeRegistrationBrowserFrm.Chromium1BeforeClose(
   Sender: TObject; const browser: ICefBrowser);
 begin
-  PostMessage(Handle, MINIBROWSER_CREATED, 0, 0);
+  FCanClose := True;
+  PostMessage(Handle, WM_CLOSE, 0, 0);
 end;
 
 procedure TSchemeRegistrationBrowserFrm.Chromium1BeforeContextMenu(
@@ -108,6 +148,25 @@ procedure TSchemeRegistrationBrowserFrm.Chromium1BeforeContextMenu(
 begin
   model.AddItem(MINIBROWSER_CONTEXTMENU_REGSCHEME,   'Register scheme');
   model.AddItem(MINIBROWSER_CONTEXTMENU_CLEARFACT,   'Clear schemes');
+end;
+
+procedure TSchemeRegistrationBrowserFrm.Chromium1BeforePopup(
+  Sender: TObject; const browser: ICefBrowser; const frame: ICefFrame;
+  const targetUrl, targetFrameName: ustring;
+  targetDisposition: TCefWindowOpenDisposition; userGesture: Boolean;
+  const popupFeatures: TCefPopupFeatures; var windowInfo: TCefWindowInfo;
+  var client: ICefClient; var settings: TCefBrowserSettings;
+  var noJavascriptAccess: Boolean; var Result: Boolean);
+begin
+  // For simplicity, this demo blocks all popup windows and new tabs
+  Result := (targetDisposition in [WOD_NEW_FOREGROUND_TAB, WOD_NEW_BACKGROUND_TAB, WOD_NEW_POPUP, WOD_NEW_WINDOW]);
+end;
+
+procedure TSchemeRegistrationBrowserFrm.Chromium1Close(Sender: TObject;
+  const browser: ICefBrowser; out Result: Boolean);
+begin
+  PostMessage(Handle, CEF_DESTROY, 0, 0);
+  Result := True;
 end;
 
 procedure TSchemeRegistrationBrowserFrm.Chromium1ContextMenuCommand(
@@ -142,9 +201,29 @@ begin
   end;
 end;
 
+procedure TSchemeRegistrationBrowserFrm.FormCloseQuery(Sender: TObject; var CanClose: Boolean);
+begin
+  CanClose := FCanClose;
+
+  if not(FClosing) then
+    begin
+      FClosing := True;
+      Visible  := False;
+      Chromium1.CloseBrowser(True);
+    end;
+end;
+
+procedure TSchemeRegistrationBrowserFrm.FormCreate(Sender: TObject);
+begin
+  // You can register the Scheme Handler Factory here or later, for example in a context menu command.
+  CefRegisterSchemeHandlerFactory('hello', '', THelloScheme);
+end;
+
 procedure TSchemeRegistrationBrowserFrm.FormShow(Sender: TObject);
 begin
-  Chromium1.CreateBrowser(CEFWindowParent1, '');
+  // GlobalCEFApp.GlobalContextInitialized has to be TRUE before creating any browser
+  // If it's not initialized yet, we use a simple timer to create the browser later.
+  if not(Chromium1.CreateBrowser(CEFWindowParent1, '')) then Timer1.Enabled := True;
 end;
 
 procedure TSchemeRegistrationBrowserFrm.GoBtnClick(Sender: TObject);
@@ -152,10 +231,23 @@ begin
   Chromium1.LoadURL(AddressCbx.Text);
 end;
 
+procedure TSchemeRegistrationBrowserFrm.Timer1Timer(Sender: TObject);
+begin
+  Timer1.Enabled := False;
+  if not(Chromium1.CreateBrowser(CEFWindowParent1, '')) and not(Chromium1.Initialized) then
+    Timer1.Enabled := True;
+end;
+
 procedure TSchemeRegistrationBrowserFrm.BrowserCreatedMsg(var aMessage : TMessage);
 begin
+  CEFWindowParent1.UpdateSize;
   AddressBarPnl.Enabled := True;
   GoBtn.Click;
+end;
+
+procedure TSchemeRegistrationBrowserFrm.BrowserDestroyMsg(var aMessage : TMessage);
+begin
+  CEFWindowParent1.Free;
 end;
 
 procedure TSchemeRegistrationBrowserFrm.WMMove(var aMessage : TWMMove);
@@ -170,6 +262,20 @@ begin
   inherited;
 
   if (Chromium1 <> nil) then Chromium1.NotifyMoveOrResizeStarted;
+end;
+
+procedure TSchemeRegistrationBrowserFrm.WMEnterMenuLoop(var aMessage: TMessage);
+begin
+  inherited;
+
+  if (aMessage.wParam = 0) and (GlobalCEFApp <> nil) then GlobalCEFApp.OsmodalLoop := True;
+end;
+
+procedure TSchemeRegistrationBrowserFrm.WMExitMenuLoop(var aMessage: TMessage);
+begin
+  inherited;
+
+  if (aMessage.wParam = 0) and (GlobalCEFApp <> nil) then GlobalCEFApp.OsmodalLoop := False;
 end;
 
 end.

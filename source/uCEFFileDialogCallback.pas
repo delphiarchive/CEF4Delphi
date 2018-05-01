@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -48,16 +48,16 @@ interface
 
 uses
   {$IFDEF DELPHI16_UP}
-  System.Classes,
+  System.Classes, System.SysUtils,
   {$ELSE}
-  Classes,
+  Classes, SysUtils,
   {$ENDIF}
   uCEFBaseRefCounted, uCEFInterfaces, uCEFTypes;
 
 type
   TCefFileDialogCallbackRef = class(TCefBaseRefCountedRef, ICefFileDialogCallback)
   protected
-    procedure Cont(selectedAcceptFilter: Integer; filePaths: TStrings);
+    procedure Cont(selectedAcceptFilter: Integer; const filePaths: TStrings);
     procedure Cancel;
   public
     class function UnWrap(data: Pointer): ICefFileDialogCallback;
@@ -66,37 +66,34 @@ type
 implementation
 
 uses
-  uCEFMiscFunctions, uCEFLibFunctions;
+  uCEFMiscFunctions, uCEFLibFunctions, uCEFStringList;
 
 procedure TCefFileDialogCallbackRef.Cancel;
 begin
   PCefFileDialogCallback(FData).cancel(FData);
 end;
 
-procedure TCefFileDialogCallbackRef.Cont(selectedAcceptFilter: Integer; filePaths: TStrings);
+procedure TCefFileDialogCallbackRef.Cont(selectedAcceptFilter: Integer; const filePaths: TStrings);
 var
-  list: TCefStringList;
-  i: Integer;
-  str: TCefString;
+  TempSL : ICefStringList;
 begin
-  list := cef_string_list_alloc;
   try
-    for i := 0 to filePaths.Count - 1 do
-    begin
-      str := CefString(filePaths[i]);
-      cef_string_list_append(list, @str);
-    end;
-    PCefFileDialogCallback(FData).cont(FData, selectedAcceptFilter, list);
+    TempSL := TCefStringListOwn.Create;
+    TempSL.AddStrings(filePaths);
+
+    PCefFileDialogCallback(FData).cont(PCefFileDialogCallback(FData),
+                                       selectedAcceptFilter,
+                                       TempSL.Handle);
   finally
-    cef_string_list_free(list);
+    TempSL := nil;
   end;
 end;
 
-class function TCefFileDialogCallbackRef.UnWrap(
-  data: Pointer): ICefFileDialogCallback;
+class function TCefFileDialogCallbackRef.UnWrap(data: Pointer): ICefFileDialogCallback;
 begin
-  if data <> nil then
-    Result := Create(data) as ICefFileDialogCallback else
+  if (data <> nil) then
+    Result := Create(data) as ICefFileDialogCallback
+   else
     Result := nil;
 end;
 

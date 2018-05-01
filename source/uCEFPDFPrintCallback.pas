@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -66,33 +66,48 @@ type
 
     public
       constructor Create(const proc: TOnPdfPrintFinishedProc); reintroduce;
+      destructor  Destroy; override;
   end;
 
-  TCefPDFPrintCallBack = class(TCefPdfPrintCallbackOwn)
+  TCefCustomPDFPrintCallBack = class(TCefPdfPrintCallbackOwn)
     protected
-      FChromiumBrowser : TObject;
+      FEvents : Pointer;
 
       procedure OnPdfPrintFinished(const path: ustring; aResultOK : Boolean); override;
 
     public
-      constructor Create(const aChromiumBrowser : TObject); reintroduce;
+      constructor Create(const aEvents : IChromiumEvents); reintroduce;
+      destructor  Destroy; override;
   end;
 
 implementation
 
 uses
-  uCEFMiscFunctions, uCEFLibFunctions, uCEFChromium;
+  {$IFDEF DELPHI16_UP}
+  System.SysUtils,
+  {$ELSE}
+  SysUtils,
+  {$ENDIF}
+  uCEFMiscFunctions, uCEFLibFunctions;
 
-procedure cef_pdf_print_callback_on_pdf_print_finished(self: PCefPdfPrintCallback; const path: PCefString; ok: Integer); stdcall;
+procedure cef_pdf_print_callback_on_pdf_print_finished(      self : PCefPdfPrintCallback;
+                                                       const path : PCefString;
+                                                             ok   : Integer); stdcall;
+var
+  TempObject : TObject;
 begin
-  with TCefPdfPrintCallbackOwn(CefGetObject(self)) do OnPdfPrintFinished(CefString(path), ok <> 0);
+  TempObject := CefGetObject(self);
+
+  if (TempObject <> nil) and (TempObject is TCefPdfPrintCallbackOwn) then
+    TCefPdfPrintCallbackOwn(TempObject).OnPdfPrintFinished(CefString(path),
+                                                           ok <> 0);
 end;
 
 constructor TCefPdfPrintCallbackOwn.Create;
 begin
-  CreateData(SizeOf(TCefPdfPrintCallback), False);
+  inherited CreateData(SizeOf(TCefPdfPrintCallback));
 
-  with PCefPdfPrintCallback(FData)^ do on_pdf_print_finished := cef_pdf_print_callback_on_pdf_print_finished;
+  PCefPdfPrintCallback(FData).on_pdf_print_finished := cef_pdf_print_callback_on_pdf_print_finished;
 end;
 
 // TCefFastPdfPrintCallback
@@ -100,27 +115,50 @@ end;
 constructor TCefFastPdfPrintCallback.Create(const proc: TOnPdfPrintFinishedProc);
 begin
   FProc := proc;
+
   inherited Create;
 end;
 
 procedure TCefFastPdfPrintCallback.OnPdfPrintFinished(const path: ustring; ok: Boolean);
 begin
-  FProc(path, ok);
+  if assigned(FProc) then FProc(path, ok);
 end;
 
-// TCefPDFPrintCallBack
+destructor TCefFastPdfPrintCallback.Destroy;
+begin
+  FProc := nil;
 
-constructor TCefPDFPrintCallBack.Create(const aChromiumBrowser : TObject);
+  inherited Destroy;
+end;
+
+// TCefCustomPDFPrintCallBack
+
+constructor TCefCustomPDFPrintCallBack.Create(const aEvents : IChromiumEvents);
 begin
   inherited Create;
 
-  FChromiumBrowser := aChromiumBrowser;
+  FEvents := Pointer(aEvents);
 end;
 
-procedure TCefPDFPrintCallBack.OnPdfPrintFinished(const path: ustring; aResultOK : Boolean);
+destructor TCefCustomPDFPrintCallBack.Destroy;
 begin
-  if (FChromiumBrowser <> nil) and (FChromiumBrowser is TChromium) then
-    TChromium(FChromiumBrowser).Internal_PdfPrintFinished(aResultOK);
+  FEvents := nil;
+
+  inherited Destroy;
+end;
+
+procedure TCefCustomPDFPrintCallBack.OnPdfPrintFinished(const path: ustring; aResultOK : Boolean);
+begin
+  try
+    try
+      if (FEvents <> nil) then IChromiumEvents(FEvents).doPdfPrintFinished(aResultOK);
+    except
+      on e : exception do
+        if CustomExceptionHandler('TCefCustomPDFPrintCallBack.OnPdfPrintFinished', e) then raise;
+    end;
+  finally
+    FEvents := nil;
+  end;
 end;
 
 end.

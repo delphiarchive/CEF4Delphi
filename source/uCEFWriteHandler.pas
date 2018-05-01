@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -48,7 +48,7 @@ interface
 
 uses
   {$IFDEF DELPHI16_UP}
-  WinApi.Windows,
+  {$IFDEF MSWINDOWS}WinApi.Windows,{$ENDIF}
   {$ELSE}
   Windows,
   {$ENDIF}
@@ -101,34 +101,67 @@ uses
 // *********** TCefWriteHandlerOwn ***********
 // *******************************************
 
-function cef_write_handler_write(self: PCefWriteHandler; const ptr: Pointer; size, n: NativeUInt): NativeUInt; stdcall;
+function cef_write_handler_write(      self : PCefWriteHandler;
+                                 const ptr  : Pointer;
+                                       size : NativeUInt;
+                                       n    : NativeUInt): NativeUInt; stdcall;
+var
+  TempObject : TObject;
 begin
-  with TCefWriteHandlerOwn(CefGetObject(self)) do
-    Result:= Write(ptr, size, n);
+  Result     := 0;
+  TempObject := CefGetObject(self);
+
+  if (TempObject <> nil) and (TempObject is TCefWriteHandlerOwn) then
+    Result:= TCefWriteHandlerOwn(TempObject).Write(ptr,
+                                                   size,
+                                                   n);
 end;
 
-function cef_write_handler_seek(self: PCefWriteHandler; offset: Int64; whence: Integer): Integer; stdcall;
+function cef_write_handler_seek(self   : PCefWriteHandler;
+                                offset : Int64;
+                                whence : Integer): Integer; stdcall;
+var
+  TempObject : TObject;
 begin
-  with TCefWriteHandlerOwn(CefGetObject(self)) do
-    Result := Seek(offset, whence);
+  Result     := 0;
+  TempObject := CefGetObject(self);
+
+  if (TempObject <> nil) and (TempObject is TCefWriteHandlerOwn) then
+    Result:= TCefWriteHandlerOwn(TempObject).Seek(offset,
+                                                  whence);
 end;
 
 function cef_write_handler_tell(self: PCefWriteHandler): Int64; stdcall;
+var
+  TempObject : TObject;
 begin
-  with TCefWriteHandlerOwn(CefGetObject(self)) do
-    Result := Tell();
+  Result     := 0;
+  TempObject := CefGetObject(self);
+
+  if (TempObject <> nil) and (TempObject is TCefWriteHandlerOwn) then
+    Result:= TCefWriteHandlerOwn(TempObject).Tell;
 end;
 
 function cef_write_handler_flush(self: PCefWriteHandler): Integer; stdcall;
+var
+  TempObject : TObject;
 begin
-  with TCefWriteHandlerOwn(CefGetObject(self)) do
-    Result := Flush();
+  Result     := 0;
+  TempObject := CefGetObject(self);
+
+  if (TempObject <> nil) and (TempObject is TCefWriteHandlerOwn) then
+    Result:= TCefWriteHandlerOwn(TempObject).Flush;
 end;
 
 function cef_write_handler_may_block(self: PCefWriteHandler): Integer; stdcall;
+var
+  TempObject : TObject;
 begin
-  with TCefWriteHandlerOwn(CefGetObject(self)) do
-    Result := Ord(MayBlock);
+  Result     := Ord(False);
+  TempObject := CefGetObject(self);
+
+  if (TempObject <> nil) and (TempObject is TCefWriteHandlerOwn) then
+    Result := Ord(TCefWriteHandlerOwn(TempObject).MayBlock);
 end;
 
 constructor TCefWriteHandlerOwn.Create;

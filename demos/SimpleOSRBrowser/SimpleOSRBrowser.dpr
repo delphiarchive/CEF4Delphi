@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -41,34 +41,24 @@ program SimpleOSRBrowser;
 
 uses
   {$IFDEF DELPHI16_UP}
-  Vcl.Forms, WinApi.Windows,
+  Vcl.Forms,
+  WinApi.Windows,
   {$ELSE}
-  Forms, Windows,
+  Forms,
+  Windows,
   {$ENDIF}
   uCEFApplication,
-  uCEFTypes,
   uSimpleOSRBrowser in 'uSimpleOSRBrowser.pas' {Form1};
 
 {$R *.res}
 
-// CEF3 needs to set the LARGEADDRESSAWARE flag which allows 32-bit processes to use up to 3GB of RAM.
 {$SetPEFlags IMAGE_FILE_LARGE_ADDRESS_AWARE}
 
 begin
   GlobalCEFApp                            := TCefApplication.Create;
   GlobalCEFApp.WindowlessRenderingEnabled := True;
   GlobalCEFApp.EnableHighDPISupport       := True;
-  //GlobalCEFApp.EnableGPU                  := False;
-
-  // In case you want to use custom directories for the CEF3 binaries, cache, cookies and user data.
-  {
-  GlobalCEFApp.FrameworkDirPath     := 'cef';
-  GlobalCEFApp.ResourcesDirPath     := 'cef';
-  GlobalCEFApp.LocalesDirPath       := 'cef\locales';
-  GlobalCEFApp.cache                := 'cef\cache';
-  GlobalCEFApp.cookies              := 'cef\cookies';
-  GlobalCEFApp.UserDataPath         := 'cef\User Data';
-  }
+  GlobalCEFApp.SitePerProcess             := False;
 
   if GlobalCEFApp.StartMainProcess then
     begin

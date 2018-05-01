@@ -12,6 +12,8 @@ object MainForm: TMainForm
   Font.Style = []
   OldCreateOrder = False
   Position = poScreenCenter
+  OnCloseQuery = FormCloseQuery
+  OnCreate = FormCreate
   OnShow = FormShow
   PixelsPerInch = 96
   TextHeight = 13
@@ -22,10 +24,8 @@ object MainForm: TMainForm
     Height = 628
     Align = alClient
     TabOrder = 0
-    ExplicitLeft = 184
-    ExplicitTop = 168
-    ExplicitWidth = 100
-    ExplicitHeight = 41
+    OnClose = ChromiumWindow1Close
+    OnBeforeClose = ChromiumWindow1BeforeClose
   end
   object AddressBarPnl: TPanel
     Left = 0
@@ -43,8 +43,6 @@ object MainForm: TMainForm
     ParentDoubleBuffered = False
     ShowCaption = False
     TabOrder = 1
-    ExplicitLeft = -620
-    ExplicitWidth = 1038
     object Edit1: TEdit
       Left = 5
       Top = 5
@@ -54,7 +52,6 @@ object MainForm: TMainForm
       Align = alClient
       TabOrder = 0
       Text = 'http://www.example.com'
-      ExplicitWidth = 997
       ExplicitHeight = 21
     end
     object Button1: TButton
@@ -67,7 +64,13 @@ object MainForm: TMainForm
       Caption = 'Go'
       TabOrder = 1
       OnClick = Button1Click
-      ExplicitLeft = 1002
     end
+  end
+  object Timer1: TTimer
+    Enabled = False
+    Interval = 300
+    OnTimer = Timer1Timer
+    Left = 48
+    Top = 240
   end
 end

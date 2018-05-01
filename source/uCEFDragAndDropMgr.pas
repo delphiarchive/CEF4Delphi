@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -43,8 +43,8 @@ interface
 
 uses
   {$IFDEF DELPHI16_UP}
-  WinApi.Windows, System.Classes, Vcl.Controls, System.SysUtils, System.Math,
-  WinApi.ActiveX, WinApi.ShlObj, WinApi.ShellApi, System.StrUtils, System.AnsiStrings,
+  {$IFDEF MSWINDOWS}WinApi.Windows, WinApi.ActiveX, WinApi.ShlObj, WinApi.ShellApi, Vcl.Controls,{$ENDIF}
+  System.Classes, System.SysUtils, System.Math, System.StrUtils, System.AnsiStrings,
   {$ELSE}
   Windows, Classes, Controls, SysUtils, Math,
   ActiveX, ShlObj, Shellapi, StrUtils, 

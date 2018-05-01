@@ -12,6 +12,9 @@ object MiniBrowserFrm: TMiniBrowserFrm
   Font.Style = []
   OldCreateOrder = False
   Position = poScreenCenter
+  OnCloseQuery = FormCloseQuery
+  OnCreate = FormCreate
+  OnDestroy = FormDestroy
   OnShow = FormShow
   PixelsPerInch = 96
   TextHeight = 13
@@ -103,7 +106,7 @@ object MiniBrowserFrm: TMiniBrowserFrm
         Font.Style = []
         ParentFont = False
         TabOrder = 3
-        OnClick = ReloadBtnClick
+        OnClick = StopBtnClick
       end
     end
     object URLEditPnl: TPanel
@@ -132,14 +135,41 @@ object MiniBrowserFrm: TMiniBrowserFrm
             'https://www.whatismybrowser.com/detect/what-http-headers-is-my-b' +
             'rowser-sending'
           'https://www.w3schools.com/js/tryit.asp?filename=tryjs_win_close'
+          'https://www.w3schools.com/js/tryit.asp?filename=tryjs_alert'
           'https://www.w3schools.com/html/html5_video.asp'
           'http://www.adobe.com/software/flash/about/'
-          'chrome://version/'
+          'http://isflashinstalled.com/'
           'http://html5test.com/'
           'https://www.w3schools.com/'
           'http://webglsamples.org/'
+          'https://get.webgl.org/'
           'https://www.youtube.com'
-          'https://html5demos.com/drag/')
+          'https://html5demos.com/drag/'
+          
+            'https://developers.google.com/maps/documentation/javascript/exam' +
+            'ples/streetview-embed?hl=fr'
+          
+            'https://www.w3schools.com/Tags/tryit.asp?filename=tryhtml_iframe' +
+            '_name'
+          'https://www.browserleaks.com/webrtc'
+          'https://frames-per-second.appspot.com/'
+          'chrome://version/'
+          'chrome://net-internals/'
+          'chrome://tracing/'
+          'chrome://appcache-internals/'
+          'chrome://blob-internals/'
+          'chrome://view-http-cache/'
+          'chrome://credits/'
+          'chrome://histograms/'
+          'chrome://media-internals/'
+          'chrome://kill'
+          'chrome://crash'
+          'chrome://hang'
+          'chrome://shorthang'
+          'chrome://gpuclean'
+          'chrome://gpucrash'
+          'chrome://gpuhang'
+          'chrome://extensions-support')
       end
     end
     object ConfigPnl: TPanel
@@ -206,12 +236,24 @@ object MiniBrowserFrm: TMiniBrowserFrm
     Height = 19
     Panels = <
       item
-        Width = 50
+        Width = 100
+      end
+      item
+        Width = 500
+      end
+      item
+        Width = 100
+      end
+      item
+        Width = 100
       end>
   end
   object Chromium1: TChromium
     OnTextResultAvailable = Chromium1TextResultAvailable
     OnPdfPrintFinished = Chromium1PdfPrintFinished
+    OnPrefsAvailable = Chromium1PrefsAvailable
+    OnResolvedHostAvailable = Chromium1ResolvedHostAvailable
+    OnRenderCompMsg = Chromium1RenderCompMsg
     OnLoadingStateChange = Chromium1LoadingStateChange
     OnBeforeContextMenu = Chromium1BeforeContextMenu
     OnContextMenuCommand = Chromium1ContextMenuCommand
@@ -221,7 +263,13 @@ object MiniBrowserFrm: TMiniBrowserFrm
     OnTitleChange = Chromium1TitleChange
     OnFullScreenModeChange = Chromium1FullScreenModeChange
     OnStatusMessage = Chromium1StatusMessage
+    OnLoadingProgressChange = Chromium1LoadingProgressChange
+    OnBeforeDownload = Chromium1BeforeDownload
+    OnDownloadUpdated = Chromium1DownloadUpdated
     OnAfterCreated = Chromium1AfterCreated
+    OnBeforeClose = Chromium1BeforeClose
+    OnClose = Chromium1Close
+    OnBeforeResourceLoad = Chromium1BeforeResourceLoad
     OnResourceResponse = Chromium1ResourceResponse
     Left = 32
     Top = 224
@@ -238,8 +286,12 @@ object MiniBrowserFrm: TMiniBrowserFrm
       Caption = '-'
     end
     object Openfile1: TMenuItem
-      Caption = 'Open file...'
+      Caption = 'Open file with a FILE URL...'
       OnClick = Openfile1Click
+    end
+    object OpenfilewithaDAT1: TMenuItem
+      Caption = 'Open file with a DATA URL...'
+      OnClick = OpenfilewithaDAT1Click
     end
     object N2: TMenuItem
       Caption = '-'
@@ -277,6 +329,10 @@ object MiniBrowserFrm: TMiniBrowserFrm
       Caption = 'Preferences...'
       OnClick = Preferences1Click
     end
+    object Resolvehost1: TMenuItem
+      Caption = 'Resolve host...'
+      OnClick = Resolvehost1Click
+    end
   end
   object SaveDialog1: TSaveDialog
     Left = 32
@@ -293,5 +349,12 @@ object MiniBrowserFrm: TMiniBrowserFrm
       'iles|*.jpg;*.jpeg;*.png;*.bmp;*.gif'
     Left = 32
     Top = 280
+  end
+  object Timer1: TTimer
+    Enabled = False
+    Interval = 300
+    OnTimer = Timer1Timer
+    Left = 32
+    Top = 344
   end
 end

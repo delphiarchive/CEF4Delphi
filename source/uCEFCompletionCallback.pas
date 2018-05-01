@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -74,8 +74,13 @@ uses
   uCEFMiscFunctions, uCEFLibFunctions, uCEFTypes;
 
 procedure cef_completion_callback_on_complete(self: PCefCompletionCallback); stdcall;
+var
+  TempObject : TObject;
 begin
-  with TCefCompletionCallbackOwn(CefGetObject(self)) do OnComplete();
+  TempObject := CefGetObject(self);
+
+  if (TempObject <> nil) and (TempObject is TCefCompletionCallbackOwn) then
+    TCefCompletionCallbackOwn(TempObject).OnComplete;
 end;
 
 // TCefCompletionHandlerOwn
@@ -84,12 +89,12 @@ constructor TCefCompletionCallbackOwn.Create;
 begin
   inherited CreateData(SizeOf(TCefCompletionCallback));
 
-  with PCefCompletionCallback(FData)^ do on_complete := cef_completion_callback_on_complete;
+  PCefCompletionCallback(FData).on_complete := cef_completion_callback_on_complete;
 end;
 
 procedure TCefCompletionCallbackOwn.OnComplete;
 begin
-
+  //
 end;
 
 // TCefFastCompletionHandler

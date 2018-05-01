@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -50,12 +50,32 @@ uses
   uCEFBaseRefCounted, uCEFInterfaces, uCEFTypes;
 
 type
+  TOnFilterEvent     = procedure(Sender: TObject; data_in: Pointer; data_in_size: NativeUInt; var data_in_read: NativeUInt; data_out: Pointer; data_out_size : NativeUInt; var data_out_written: NativeUInt; var aResult : TCefResponseFilterStatus) of object;
+  TOnInitFilterEvent = procedure(Sender: TObject; var aResult : boolean) of object;
+
+
   TCefResponseFilterOwn = class(TCefBaseRefCountedOwn, ICefResponseFilter)
-  protected
-    function InitFilter: Boolean; virtual; abstract;
-    function Filter(dataIn: Pointer; dataInSize : NativeUInt; dataInRead: PNativeUInt; dataOut: Pointer; dataOutSize : NativeUInt; dataOutWritten: PNativeUInt): TCefResponseFilterStatus; virtual; abstract;
-  public
-    constructor Create; virtual;
+    protected
+      function InitFilter: Boolean; virtual; abstract;
+      function Filter(data_in: Pointer; data_in_size: NativeUInt; var data_in_read: NativeUInt; data_out: Pointer; data_out_size : NativeUInt; var data_out_written: NativeUInt): TCefResponseFilterStatus; virtual; abstract;
+
+    public
+      constructor Create; virtual;
+  end;
+
+  TCustomResponseFilter = class(TCefResponseFilterOwn)
+    protected
+      FOnFilter     : TOnFilterEvent;
+      FOnInitFilter : TOnInitFilterEvent;
+
+      function InitFilter: Boolean; override;
+      function Filter(data_in: Pointer; data_in_size: NativeUInt; var data_in_read: NativeUInt; data_out: Pointer; data_out_size : NativeUInt; var data_out_written: NativeUInt): TCefResponseFilterStatus; override;
+
+    public
+      constructor Create; override;
+
+      property OnFilter      : TOnFilterEvent      read FOnFilter      write FOnFilter;
+      property OnInitFilter  : TOnInitFilterEvent  read FOnInitFilter  write FOnInitFilter;
   end;
 
 implementation
@@ -63,27 +83,81 @@ implementation
 uses
   uCEFMiscFunctions, uCEFLibFunctions;
 
+// TCefResponseFilterOwn
+
 function cef_response_filter_init_filter(self: PCefResponseFilter): Integer; stdcall;
+var
+  TempObject : TObject;
 begin
-  with TCefResponseFilterOwn(CefGetObject(self)) do
-    Result := Ord(InitFilter());
+  Result     := Ord(True);
+  TempObject := CefGetObject(self);
+
+  if (TempObject <> nil) and (TempObject is TCefResponseFilterOwn) then
+    Result := Ord(TCefResponseFilterOwn(TempObject).InitFilter());
 end;
 
-function cef_response_filter_filter(self: PCefResponseFilter; data_in: Pointer; data_in_size : NativeUInt; var data_in_read: NativeUInt;
-  data_out: Pointer; data_out_size: NativeUInt; var data_out_written: NativeUInt): TCefResponseFilterStatus; stdcall;
+function cef_response_filter_filter(    self             : PCefResponseFilter;
+                                        data_in          : Pointer;
+                                        data_in_size     : NativeUInt;
+                                    var data_in_read     : NativeUInt;
+                                        data_out         : Pointer;
+                                        data_out_size    : NativeUInt;
+                                    var data_out_written : NativeUInt): TCefResponseFilterStatus; stdcall;
+var
+  TempObject : TObject;
 begin
-  with TCefResponseFilterOwn(CefGetObject(self)) do
-    Result := Filter(data_in, data_in_size, @data_in_read, data_out, data_out_size, @data_out_written);
+  Result     := RESPONSE_FILTER_DONE;
+  TempObject := CefGetObject(self);
+
+  if (TempObject <> nil) and (TempObject is TCefResponseFilterOwn) then
+    Result := TCefResponseFilterOwn(TempObject).Filter(data_in,  data_in_size,  data_in_read,
+                                                       data_out, data_out_size, data_out_written);
 end;
 
 constructor TCefResponseFilterOwn.Create;
 begin
-  CreateData(SizeOf(TCefResponseFilter), False);
+  inherited CreateData(SizeOf(TCefResponseFilter));
+
   with PCefResponseFilter(FData)^ do
-  begin
-    init_filter := cef_response_filter_init_filter;
-    filter := cef_response_filter_filter;
-  end;
+    begin
+      init_filter := cef_response_filter_init_filter;
+      filter      := cef_response_filter_filter;
+    end;
 end;
+
+
+// TCustomResponseFilter
+
+
+constructor TCustomResponseFilter.Create;
+begin
+  inherited Create;
+
+  FOnFilter     := nil;
+  FOnInitFilter := nil;
+end;
+
+function TCustomResponseFilter.InitFilter: Boolean;
+begin
+  Result := True;
+  if assigned(FOnInitFilter) then FOnInitFilter(self, Result);
+end;
+
+function TCustomResponseFilter.Filter(    data_in          : Pointer;
+                                          data_in_size     : NativeUInt;
+                                      var data_in_read     : NativeUInt;
+                                          data_out         : Pointer;
+                                          data_out_size    : NativeUInt;
+                                      var data_out_written : NativeUInt) : TCefResponseFilterStatus;
+begin
+  Result := RESPONSE_FILTER_DONE;
+
+  if assigned(FOnFilter) then
+    FOnFilter(self,
+              data_in,  data_in_size,  data_in_read,
+              data_out, data_out_size, data_out_written,
+              Result);
+end;
+
 
 end.

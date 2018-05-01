@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -48,7 +48,7 @@ interface
 
 uses
   {$IFDEF DELPHI16_UP}
-  WinApi.Windows, System.Math,
+  {$IFDEF MSWINDOWS}WinApi.Windows,{$ENDIF} System.Math,
   {$ELSE}
   Windows, Math,
   {$ENDIF}
@@ -74,8 +74,9 @@ var
   cef_command_line_get_global : function : PCefCommandLine; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
 
   // /include/capi/cef_cookie_capi.h
-  cef_cookie_manager_get_global_manager : function(callback: PCefCompletionCallback): PCefCookieManager; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
-  cef_cookie_manager_create_manager     : function(const path: PCefString; persist_session_cookies: Integer; callback: PCefCompletionCallback): PCefCookieManager; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
+  cef_cookie_manager_get_global_manager   : function(callback: PCefCompletionCallback): PCefCookieManager; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
+  cef_cookie_manager_get_blocking_manager : function : PCefCookieManager; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
+  cef_cookie_manager_create_manager       : function(const path: PCefString; persist_session_cookies: Integer; callback: PCefCompletionCallback): PCefCookieManager; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
 
   // /include/capi/cef_crash_util.h
   cef_crash_reporting_enabled : function : integer; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
@@ -94,9 +95,6 @@ var
   cef_zip_directory                      : function(const src_dir, dest_file : PCefString; include_hidden_files : integer): Integer; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
   cef_load_crlsets_file                  : procedure(const path : PCefString); {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
 
-  // /include/capi/cef_geolocation_capi.h
-  cef_get_geolocation : function(callback: PCefGetGeolocationCallback): Integer; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
-
   // /include/capi/cef_image_capi.h
   cef_image_create : function : PCefImage; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
 
@@ -110,7 +108,7 @@ var
 
   // /include/capi/cef_parser_capi.h
   cef_parse_url                       : function(const url: PCefString; var parts: TCefUrlParts): Integer; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
-  cef_create_url                      : function(parts: PCefUrlParts; url: PCefString): Integer; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
+  cef_create_url                      : function(const parts: PCefUrlParts; url: PCefString): Integer; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
   cef_format_url_for_security_display : function(const origin_url: PCefString): PCefStringUserFree; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
   cef_get_mime_type                   : function(const extension: PCefString): PCefStringUserFree; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
   cef_get_extensions_for_mime_type    : procedure(const mime_type: PCefString; extensions: TCefStringList); {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
@@ -153,6 +151,9 @@ var
   // /include/capi/cef_scheme_capi.h
   cef_register_scheme_handler_factory : function(const scheme_name, domain_name: PCefString; factory: PCefSchemeHandlerFactory): Integer; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
   cef_clear_scheme_handler_factories  : function : Integer; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
+
+  // /include/capi/cef_server_capi.h
+  cef_server_create : procedure(const address: PCefString; port: uint16; backlog: Integer; handler: PCefServerHandler); {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
 
   // /include/capi/cef_ssl_info_capi.h
   cef_is_cert_status_error       : function(status : TCefCertStatus) : integer; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
@@ -197,6 +198,7 @@ var
   cef_v8value_create_string         : function(const value: PCefString): PCefv8Value; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
   cef_v8value_create_object         : function(accessor: PCefV8Accessor; interceptor: PCefV8Interceptor): PCefv8Value; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
   cef_v8value_create_array          : function(length: Integer): PCefv8Value; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
+  cef_v8value_create_array_buffer   : function(buffer : Pointer; length: NativeUInt; release_callback : PCefv8ArrayBufferReleaseCallback): PCefv8Value; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
   cef_v8value_create_function       : function(const name: PCefString; handler: PCefv8Handler): PCefv8Value; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
   cef_v8stack_trace_get_current     : function(frame_limit: Integer): PCefV8StackTrace; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
   cef_register_extension            : function(const extension_name, javascript_code: PCefString; handler: PCefv8Handler): Integer; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
@@ -260,7 +262,7 @@ var
   cef_string_multimap_free       : procedure(map: TCefStringMultimap); {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
 
   // /include/internal/cef_string_types.h
-  cef_string_wide_set             : function(const src: PWideChar; src_len: NativeUInt;  output: PCefStringWide; copy: Integer): Integer; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
+  cef_string_wide_set             : function(const src: PWideChar; src_len: NativeUInt; output: PCefStringWide; copy: Integer): Integer; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
   cef_string_utf8_set             : function(const src: PAnsiChar; src_len: NativeUInt; output: PCefStringUtf8; copy: Integer): Integer; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
   cef_string_utf16_set            : function(const src: PChar16; src_len: NativeUInt; output: PCefStringUtf16; copy: Integer): Integer; {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};
   cef_string_wide_clear           : procedure(str: PCefStringWide); {$IFDEF CPUX64}stdcall{$ELSE}cdecl{$ENDIF};

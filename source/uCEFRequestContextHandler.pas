@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -54,8 +54,9 @@ type
 
   TCefRequestContextHandlerRef = class(TCefBaseRefCountedRef, ICefRequestContextHandler)
     protected
-      function GetCookieManager: ICefCookieManager;
-      function OnBeforePluginLoad(const mimeType, pluginUrl: ustring; isMainFrame : boolean; const topOriginUrl: ustring; const pluginInfo: ICefWebPluginInfo; pluginPolicy: PCefPluginPolicy): Boolean;
+      procedure OnRequestContextInitialized(const request_context: ICefRequestContext);
+      function  GetCookieManager: ICefCookieManager;
+      function  OnBeforePluginLoad(const mimeType, pluginUrl: ustring; isMainFrame : boolean; const topOriginUrl: ustring; const pluginInfo: ICefWebPluginInfo; pluginPolicy: PCefPluginPolicy): Boolean;
 
     public
       class function UnWrap(data: Pointer): ICefRequestContextHandler;
@@ -63,8 +64,9 @@ type
 
   TCefRequestContextHandlerOwn = class(TCefBaseRefCountedOwn, ICefRequestContextHandler)
     protected
-      function GetCookieManager: ICefCookieManager; virtual;
-      function OnBeforePluginLoad(const mimeType, pluginUrl: ustring; isMainFrame : boolean; const topOriginUrl: ustring; const pluginInfo: ICefWebPluginInfo; pluginPolicy: PCefPluginPolicy): Boolean; virtual;
+      procedure OnRequestContextInitialized(const request_context: ICefRequestContext);
+      function  GetCookieManager: ICefCookieManager; virtual;
+      function  OnBeforePluginLoad(const mimeType, pluginUrl: ustring; isMainFrame : boolean; const topOriginUrl: ustring; const pluginInfo: ICefWebPluginInfo; pluginPolicy: PCefPluginPolicy): Boolean; virtual;
 
     public
       constructor Create; virtual;
@@ -83,28 +85,90 @@ type
 implementation
 
 uses
-  uCEFMiscFunctions, uCEFLibFunctions, uCEFCookieManager, uCEFWebPluginInfo;
+  uCEFMiscFunctions, uCEFLibFunctions, uCEFCookieManager, uCEFWebPluginInfo, uCEFRequestContext;
 
-function cef_request_context_handler_get_cookie_manager(self: PCefRequestContextHandler): PCefCookieManager; stdcall;
+// TCefRequestContextHandlerOwn
+
+procedure cef_request_context_handler_on_request_context_initialized(self            : PCefRequestContextHandler;
+                                                                     request_context : PCefRequestContext); stdcall;
+var
+  TempObject : TObject;
 begin
-  with TCefRequestContextHandlerOwn(CefGetObject(self)) do
-    Result := CefGetData(GetCookieManager());
+  TempObject := CefGetObject(self);
+
+  if (TempObject <> nil) and (TempObject is TCefRequestContextHandlerOwn) then
+    TCefRequestContextHandlerOwn(TempObject).OnRequestContextInitialized(TCefRequestContextRef.UnWrap(request_context));
 end;
 
-function cef_request_context_handler_on_before_plugin_load(self: PCefRequestContextHandler;
-                                                           const mime_type, plugin_url : PCefString;
-                                                                 is_main_frame : integer;
-                                                           const top_origin_url: PCefString;
-                                                                 plugin_info: PCefWebPluginInfo;
-                                                                 plugin_policy: PCefPluginPolicy): Integer; stdcall;
+function cef_request_context_handler_get_cookie_manager(self: PCefRequestContextHandler): PCefCookieManager; stdcall;
+var
+  TempObject : TObject;
 begin
-  with TCefRequestContextHandlerOwn(CefGetObject(self)) do
-    Result := Ord(OnBeforePluginLoad(CefString(mime_type),
-                                     CefString(plugin_url),
-                                     (is_main_frame <> 0),
-                                     CefString(top_origin_url),
-                                     TCefWebPluginInfoRef.UnWrap(plugin_info),
-                                     plugin_policy));
+  Result     := nil;
+  TempObject := CefGetObject(self);
+
+  if (TempObject <> nil) and (TempObject is TCefRequestContextHandlerOwn) then
+    Result := CefGetData(TCefRequestContextHandlerOwn(TempObject).GetCookieManager());
+end;
+
+function cef_request_context_handler_on_before_plugin_load(      self           : PCefRequestContextHandler;
+                                                           const mime_type      : PCefString;
+                                                           const plugin_url     : PCefString;
+                                                                 is_main_frame  : integer;
+                                                           const top_origin_url : PCefString;
+                                                                 plugin_info    : PCefWebPluginInfo;
+                                                                 plugin_policy  : PCefPluginPolicy): Integer; stdcall;
+var
+  TempObject : TObject;
+begin
+  Result     := Ord(False);
+  TempObject := CefGetObject(self);
+
+  if (TempObject <> nil) and (TempObject is TCefRequestContextHandlerOwn) then
+    Result := Ord(TCefRequestContextHandlerOwn(TempObject).OnBeforePluginLoad(CefString(mime_type),
+                                                                              CefString(plugin_url),
+                                                                              (is_main_frame <> 0),
+                                                                              CefString(top_origin_url),
+                                                                              TCefWebPluginInfoRef.UnWrap(plugin_info),
+                                                                              plugin_policy));
+end;
+
+constructor TCefRequestContextHandlerOwn.Create;
+begin
+  inherited CreateData(SizeOf(TCefRequestContextHandler));
+
+  with PCefRequestContextHandler(FData)^ do
+    begin
+      on_request_context_initialized := cef_request_context_handler_on_request_context_initialized;
+      get_cookie_manager             := cef_request_context_handler_get_cookie_manager;
+      on_before_plugin_load          := cef_request_context_handler_on_before_plugin_load;
+    end;
+end;
+
+procedure TCefRequestContextHandlerOwn.OnRequestContextInitialized(const request_context: ICefRequestContext);
+begin
+
+end;
+
+function TCefRequestContextHandlerOwn.GetCookieManager: ICefCookieManager;
+begin
+  Result:= nil;
+end;
+
+function TCefRequestContextHandlerOwn.OnBeforePluginLoad(const mimeType, pluginUrl : ustring;
+                                                               isMainFrame : boolean;
+                                                         const topOriginUrl: ustring;
+                                                         const pluginInfo: ICefWebPluginInfo;
+                                                               pluginPolicy: PCefPluginPolicy): Boolean;
+begin
+  Result := False;
+end;
+
+// TCefRequestContextHandlerRef
+
+procedure TCefRequestContextHandlerRef.OnRequestContextInitialized(const request_context: ICefRequestContext);
+begin
+  PCefRequestContextHandler(FData).on_request_context_initialized(FData, CefGetData(request_context));
 end;
 
 function TCefRequestContextHandlerRef.GetCookieManager: ICefCookieManager;
@@ -135,38 +199,12 @@ begin
     Result := nil;
 end;
 
-// TCefRequestContextHandlerOwn
-
-constructor TCefRequestContextHandlerOwn.Create;
-begin
-  CreateData(SizeOf(TCefRequestContextHandler), False);
-
-  with PCefRequestContextHandler(FData)^ do
-    begin
-      get_cookie_manager    := cef_request_context_handler_get_cookie_manager;
-      on_before_plugin_load := cef_request_context_handler_on_before_plugin_load;
-    end;
-end;
-
-function TCefRequestContextHandlerOwn.GetCookieManager: ICefCookieManager;
-begin
-  Result:= nil;
-end;
-
-function TCefRequestContextHandlerOwn.OnBeforePluginLoad(const mimeType, pluginUrl : ustring;
-                                                               isMainFrame : boolean;
-                                                         const topOriginUrl: ustring;
-                                                         const pluginInfo: ICefWebPluginInfo;
-                                                               pluginPolicy: PCefPluginPolicy): Boolean;
-begin
-  Result := False;
-end;
-
 // TCefFastRequestContextHandler
 
 constructor TCefFastRequestContextHandler.Create(const proc: TCefRequestContextHandlerProc);
 begin
   FProc := proc;
+
   inherited Create;
 end;
 

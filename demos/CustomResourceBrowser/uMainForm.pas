@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -49,10 +49,8 @@ uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics,
   Controls, Forms, Dialogs, StdCtrls, ExtCtrls,
   {$ENDIF}
-  uCEFChromium, uCEFWindowParent, uCEFChromiumWindow, uCEFInterfaces, uCustomResourceHandler;
-
-const
-  MINIBROWSER_CREATED       = WM_APP + $100;
+  uCEFChromium, uCEFWindowParent, uCEFChromiumWindow, uCEFInterfaces, uCustomResourceHandler,
+  uCEFConstants, uCEFTypes;
 
 type
   TMainForm = class(TForm)
@@ -60,18 +58,30 @@ type
     AddressBarPnl: TPanel;
     Edit1: TEdit;
     Button1: TButton;
+    Timer1: TTimer;
 
     procedure FormShow(Sender: TObject);
     procedure Button1Click(Sender: TObject);
+    procedure Timer1Timer(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
+    procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
+    procedure ChromiumWindow1Close(Sender: TObject);
+    procedure ChromiumWindow1BeforeClose(Sender: TObject);
 
   private
     procedure WMMove(var aMessage : TWMMove); message WM_MOVE;
     procedure WMMoving(var aMessage : TMessage); message WM_MOVING;
-    procedure BrowserCreatedMsg(var aMessage : TMessage); message MINIBROWSER_CREATED;
+    procedure WMEnterMenuLoop(var aMessage: TMessage); message WM_ENTERMENULOOP;
+    procedure WMExitMenuLoop(var aMessage: TMessage); message WM_EXITMENULOOP;
 
   protected
-    procedure Chromium_OnAfterCreated(Sender: TObject; const browser: ICefBrowser);
+    // Variables to control when can we destroy the form safely
+    FCanClose : boolean;  // Set to True in TChromium.OnBeforeClose
+    FClosing  : boolean;  // Set to True in the CloseQuery event.
+
+    procedure Chromium_OnAfterCreated(Sender: TObject);
     procedure Chromium_OnGetResourceHandler(Sender: TObject; const browser: ICefBrowser; const frame: ICefFrame; const request: ICefRequest; out Result: ICefResourceHandler);
+    procedure Chromium_OnBeforePopup(Sender: TObject; const browser: ICefBrowser; const frame: ICefFrame; const targetUrl, targetFrameName: ustring; targetDisposition: TCefWindowOpenDisposition; userGesture: Boolean; const popupFeatures: TCefPopupFeatures; var windowInfo: TCefWindowInfo; var client: ICefClient; var settings: TCefBrowserSettings; var noJavascriptAccess: Boolean; var Result: Boolean);
 
   public
     { Public declarations }
@@ -85,23 +95,75 @@ implementation
 {$R *.dfm}
 
 uses
-  uCEFMiscFunctions;
+  uCEFMiscFunctions, uCEFApplication;
+
+// Destruction steps
+// =================
+// 1. The FormCloseQuery event sets CanClose to False and calls TChromiumWindow.CloseBrowser, which triggers the TChromiumWindow.OnClose event.
+// 2. The TChromiumWindow.OnClose event calls TChromiumWindow.DestroyChildWindow which triggers the TChromiumWindow.OnBeforeClose event.
+// 3. TChromiumWindow.OnBeforeClose sets FCanClose to True and closes the form.
 
 procedure TMainForm.Button1Click(Sender: TObject);
 begin
   ChromiumWindow1.LoadURL(Edit1.Text);
 end;
 
-procedure TMainForm.FormShow(Sender: TObject);
+procedure TMainForm.FormCloseQuery(Sender: TObject; var CanClose: Boolean);
 begin
-  ChromiumWindow1.ChromiumBrowser.OnAfterCreated       := Chromium_OnAfterCreated;
-  ChromiumWindow1.ChromiumBrowser.OnGetResourceHandler := Chromium_OnGetResourceHandler;
-  ChromiumWindow1.CreateBrowser;
+  CanClose := FCanClose;
+
+  if not(FClosing) then
+    begin
+      FClosing := True;
+      Visible  := False;
+      ChromiumWindow1.CloseBrowser(True);
+    end;
 end;
 
-procedure TMainForm.Chromium_OnAfterCreated(Sender: TObject; const browser: ICefBrowser);
+procedure TMainForm.FormCreate(Sender: TObject);
 begin
-  PostMessage(Handle, MINIBROWSER_CREATED, 0, 0);
+  FCanClose := False;
+  FClosing  := False;
+end;
+
+procedure TMainForm.FormShow(Sender: TObject);
+begin
+  ChromiumWindow1.OnAfterCreated                       := Chromium_OnAfterCreated;
+  ChromiumWindow1.ChromiumBrowser.OnGetResourceHandler := Chromium_OnGetResourceHandler;
+  ChromiumWindow1.ChromiumBrowser.OnBeforePopup        := Chromium_OnBeforePopup;
+
+  // GlobalCEFApp.GlobalContextInitialized has to be TRUE before creating any browser
+  // If it's not initialized yet, we use a simple timer to create the browser later.
+  if not(ChromiumWindow1.CreateBrowser) then Timer1.Enabled := True;
+end;
+
+procedure TMainForm.Timer1Timer(Sender: TObject);
+begin
+  Timer1.Enabled := False;
+  if not(ChromiumWindow1.CreateBrowser) and not(ChromiumWindow1.Initialized) then
+    Timer1.Enabled := True;
+end;
+
+procedure TMainForm.ChromiumWindow1BeforeClose(Sender: TObject);
+begin
+  FCanClose := True;
+  Close;
+end;
+
+procedure TMainForm.ChromiumWindow1Close(Sender: TObject);
+begin
+  // DestroyChildWindow will destroy the child window created by CEF at the top of the Z order.
+  if not(ChromiumWindow1.DestroyChildWindow) then
+    begin
+      FCanClose := True;
+      Close;
+    end;
+end;
+
+procedure TMainForm.Chromium_OnAfterCreated(Sender: TObject);
+begin
+  ChromiumWindow1.UpdateSize;
+  AddressBarPnl.Enabled := True;
 end;
 
 procedure TMainForm.Chromium_OnGetResourceHandler(Sender : TObject;
@@ -114,6 +176,7 @@ var
 begin
   // This event is called from the IO thread. Use mutexes if necessary.
   TempStream := nil;
+  Result     := nil;
 
   try
     try
@@ -128,27 +191,44 @@ begin
   end;
 end;
 
-procedure TMainForm.BrowserCreatedMsg(var aMessage : TMessage);
+procedure TMainForm.Chromium_OnBeforePopup(Sender: TObject;
+  const browser: ICefBrowser; const frame: ICefFrame; const targetUrl,
+  targetFrameName: ustring; targetDisposition: TCefWindowOpenDisposition;
+  userGesture: Boolean; const popupFeatures: TCefPopupFeatures;
+  var windowInfo: TCefWindowInfo; var client: ICefClient;
+  var settings: TCefBrowserSettings; var noJavascriptAccess: Boolean;
+  var Result: Boolean);
 begin
-  AddressBarPnl.Enabled := True;
+  // For simplicity, this demo blocks all popup windows and new tabs
+  Result := (targetDisposition in [WOD_NEW_FOREGROUND_TAB, WOD_NEW_BACKGROUND_TAB, WOD_NEW_POPUP, WOD_NEW_WINDOW]);
 end;
 
 procedure TMainForm.WMMove(var aMessage : TWMMove);
 begin
   inherited;
 
-  if (ChromiumWindow1                 <> nil) and
-     (ChromiumWindow1.ChromiumBrowser <> nil) then
-    ChromiumWindow1.ChromiumBrowser.NotifyMoveOrResizeStarted;
+  if (ChromiumWindow1 <> nil) then ChromiumWindow1.NotifyMoveOrResizeStarted;
 end;
 
 procedure TMainForm.WMMoving(var aMessage : TMessage);
 begin
   inherited;
 
-  if (ChromiumWindow1                 <> nil) and
-     (ChromiumWindow1.ChromiumBrowser <> nil) then
-    ChromiumWindow1.ChromiumBrowser.NotifyMoveOrResizeStarted;
+  if (ChromiumWindow1 <> nil) then ChromiumWindow1.NotifyMoveOrResizeStarted;
+end;
+
+procedure TMainForm.WMEnterMenuLoop(var aMessage: TMessage);
+begin
+  inherited;
+
+  if (aMessage.wParam = 0) and (GlobalCEFApp <> nil) then GlobalCEFApp.OsmodalLoop := True;
+end;
+
+procedure TMainForm.WMExitMenuLoop(var aMessage: TMessage);
+begin
+  inherited;
+
+  if (aMessage.wParam = 0) and (GlobalCEFApp <> nil) then GlobalCEFApp.OsmodalLoop := False;
 end;
 
 end.

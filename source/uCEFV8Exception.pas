@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -113,8 +113,9 @@ end;
 
 class function TCefV8ExceptionRef.UnWrap(data: Pointer): ICefV8Exception;
 begin
-  if data <> nil then
-    Result := Create(data) as ICefV8Exception else
+  if (data <> nil) then
+    Result := Create(data) as ICefV8Exception
+   else
     Result := nil;
 end;
 

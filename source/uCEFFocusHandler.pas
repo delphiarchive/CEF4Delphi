@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -53,8 +53,10 @@ type
   TCefFocusHandlerOwn = class(TCefBaseRefCountedOwn, ICefFocusHandler)
     protected
       procedure OnTakeFocus(const browser: ICefBrowser; next: Boolean); virtual;
-      function OnSetFocus(const browser: ICefBrowser; source: TCefFocusSource): Boolean; virtual;
+      function  OnSetFocus(const browser: ICefBrowser; source: TCefFocusSource): Boolean; virtual;
       procedure OnGotFocus(const browser: ICefBrowser); virtual;
+
+      procedure RemoveReferences; virtual;
 
     public
       constructor Create; virtual;
@@ -62,49 +64,77 @@ type
 
   TCustomFocusHandler = class(TCefFocusHandlerOwn)
     protected
-      FEvent: IChromiumEvents;
+      FEvents : Pointer;
 
       procedure OnTakeFocus(const browser: ICefBrowser; next: Boolean); override;
-      function OnSetFocus(const browser: ICefBrowser; source: TCefFocusSource): Boolean; override;
+      function  OnSetFocus(const browser: ICefBrowser; source: TCefFocusSource): Boolean; override;
       procedure OnGotFocus(const browser: ICefBrowser); override;
 
+      procedure RemoveReferences; override;
+
     public
-      constructor Create(const events: IChromiumEvents); reintroduce; virtual;
+      constructor Create(const events : Pointer); reintroduce; virtual;
       destructor  Destroy; override;
   end;
 
 implementation
 
 uses
+  {$IFDEF DELPHI16_UP}
+  System.SysUtils,
+  {$ELSE}
+  SysUtils,
+  {$ENDIF}
   uCEFMiscFunctions, uCEFLibFunctions, uCEFBrowser;
 
-procedure cef_focus_handler_on_take_focus(self: PCefFocusHandler; browser: PCefBrowser; next: Integer); stdcall;
+procedure cef_focus_handler_on_take_focus(self    : PCefFocusHandler;
+                                          browser : PCefBrowser;
+                                          next    : Integer); stdcall;
+var
+  TempObject : TObject;
 begin
-  with TCefFocusHandlerOwn(CefGetObject(self)) do
-    OnTakeFocus(TCefBrowserRef.UnWrap(browser), next <> 0);
+  TempObject := CefGetObject(self);
+
+  if (TempObject <> nil) and (TempObject is TCefFocusHandlerOwn) then
+    TCefFocusHandlerOwn(TempObject).OnTakeFocus(TCefBrowserRef.UnWrap(browser),
+                                                next <> 0);
 end;
 
-function cef_focus_handler_on_set_focus(self: PCefFocusHandler; browser: PCefBrowser; source: TCefFocusSource): Integer; stdcall;
+function cef_focus_handler_on_set_focus(self    : PCefFocusHandler;
+                                        browser : PCefBrowser;
+                                        source  : TCefFocusSource): Integer; stdcall;
+var
+  TempObject : TObject;
 begin
-  with TCefFocusHandlerOwn(CefGetObject(self)) do
-    Result := Ord(OnSetFocus(TCefBrowserRef.UnWrap(browser), source))
+  Result     := Ord(False);
+  TempObject := CefGetObject(self);
+
+  if (TempObject <> nil) and (TempObject is TCefFocusHandlerOwn) then
+    Result := Ord(TCefFocusHandlerOwn(TempObject).OnSetFocus(TCefBrowserRef.UnWrap(browser),
+                                                             source))
 end;
 
-procedure cef_focus_handler_on_got_focus(self: PCefFocusHandler; browser: PCefBrowser); stdcall;
+procedure cef_focus_handler_on_got_focus(self    : PCefFocusHandler;
+                                         browser : PCefBrowser); stdcall;
+var
+  TempObject : TObject;
 begin
-  with TCefFocusHandlerOwn(CefGetObject(self)) do
-    OnGotFocus(TCefBrowserRef.UnWrap(browser));
+  TempObject := CefGetObject(self);
+
+  if (TempObject <> nil) and (TempObject is TCefFocusHandlerOwn) then
+    TCefFocusHandlerOwn(TempObject).OnGotFocus(TCefBrowserRef.UnWrap(browser));
 end;
 
 constructor TCefFocusHandlerOwn.Create;
 begin
   inherited CreateData(SizeOf(TCefFocusHandler));
+
   with PCefFocusHandler(FData)^ do
-  begin
-    on_take_focus := cef_focus_handler_on_take_focus;
-    on_set_focus := cef_focus_handler_on_set_focus;
-    on_got_focus := cef_focus_handler_on_got_focus;
-  end;
+    begin
+      on_take_focus := cef_focus_handler_on_take_focus;
+      on_set_focus  := cef_focus_handler_on_set_focus;
+      on_got_focus  := cef_focus_handler_on_got_focus;
+    end;
 end;
 
 function TCefFocusHandlerOwn.OnSetFocus(const browser: ICefBrowser; source: TCefFocusSource): Boolean;
@@ -122,41 +152,49 @@ begin
   //
 end;
 
+procedure TCefFocusHandlerOwn.RemoveReferences;
+begin
+  //
+end;
+
 // TCustomFocusHandler
 
-constructor TCustomFocusHandler.Create(const events: IChromiumEvents);
+constructor TCustomFocusHandler.Create(const events: Pointer);
 begin
   inherited Create;
 
-  FEvent := events;
+  FEvents := events;
 end;
 
 destructor TCustomFocusHandler.Destroy;
 begin
-  FEvent := nil;
+  RemoveReferences;
 
   inherited Destroy;
 end;
 
+procedure TCustomFocusHandler.RemoveReferences;
+begin
+  FEvents := nil;
+end;
+
 procedure TCustomFocusHandler.OnGotFocus(const browser: ICefBrowser);
 begin
-  if (FEvent <> nil) then FEvent.doOnGotFocus(browser);
+  if (FEvents <> nil) then IChromiumEvents(FEvents).doOnGotFocus(browser);
 end;
 
 function TCustomFocusHandler.OnSetFocus(const browser: ICefBrowser; source: TCefFocusSource): Boolean;
 begin
-  if (FEvent <> nil) then
-    Result := FEvent.doOnSetFocus(browser, source)
+  if (FEvents <> nil) then
+    Result := IChromiumEvents(FEvents).doOnSetFocus(browser, source)
    else
     Result := inherited OnSetFocus(browser, source);
 end;
 
 procedure TCustomFocusHandler.OnTakeFocus(const browser: ICefBrowser; next: Boolean);
 begin
-  if (FEvent <> nil) then FEvent.doOnTakeFocus(browser, next);
+  if (FEvents <> nil) then IChromiumEvents(FEvents).doOnTakeFocus(browser, next);
 end;
-
-
 
 end.
 

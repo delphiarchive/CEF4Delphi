@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -166,10 +166,12 @@ const
   // /include/internal/cef_types.h (cef_urlrequest_flags_t)
   UR_FLAG_NONE                     = 0;
   UR_FLAG_SKIP_CACHE               = 1 shl 0;
-  UR_FLAG_ALLOW_CACHED_CREDENTIALS = 1 shl 1;
+  UR_FLAG_ONLY_FROM_CACHE          = 1 shl 1;
+  UR_FLAG_ALLOW_STORED_CREDENTIALS = 1 shl 2;
   UR_FLAG_REPORT_UPLOAD_PROGRESS   = 1 shl 3;
-  UR_FLAG_NO_DOWNLOAD_DATA         = 1 shl 6;
-  UR_FLAG_NO_RETRY_ON_5XX          = 1 shl 7;
+  UR_FLAG_NO_DOWNLOAD_DATA         = 1 shl 4;
+  UR_FLAG_NO_RETRY_ON_5XX          = 1 shl 5;
+  UR_FLAG_STOP_ON_REDIRECT         = 1 shl 6;
 
   // /include/internal/cef_types.h (cef_dom_event_category_t)
   DOM_EVENT_CATEGORY_UNKNOWN                 = 0;
@@ -311,6 +313,15 @@ const
   JSON_WRITER_OMIT_DOUBLE_TYPE_PRESERVATION = 1 shl 1;
   JSON_WRITER_PRETTY_PRINT                  = 1 shl 2;
 
+  // /include/internal/cef_types.h (cef_log_severity_t)
+  LOGSEVERITY_DEFAULT  = 0;
+  LOGSEVERITY_VERBOSE  = 1;
+  LOGSEVERITY_DEBUG    = LOGSEVERITY_VERBOSE;
+  LOGSEVERITY_INFO     = 2;
+  LOGSEVERITY_WARNING  = 3;
+  LOGSEVERITY_ERROR    = 4;
+  LOGSEVERITY_DISABLE  = 99;
+
 
 //******************************************************
 //****************** OTHER CONSTANTS *******************
@@ -331,7 +342,7 @@ const
   CEF_CONTENT_SETTING_SESSION_ONLY  = 4;
   CEF_CONTENT_SETTING_NUM_SETTINGS  = 5;
 
-  // Used in the severity parameter of cef_log
+  // Used in the severity parameter in the 'cef_log' function, also known as 'CefLog' in CEF4Delphi.
   CEF_LOG_SEVERITY_INFO    = 0;
   CEF_LOG_SEVERITY_WARNING = 1;
   CEF_LOG_SEVERITY_ERROR   = 2;
@@ -359,10 +370,23 @@ const
   CEF_PREFERENCES_SAVED  = WM_APP + $A00;
   CEF_DOONCLOSE          = WM_APP + $A01;
   CEF_STARTDRAGGING      = WM_APP + $A02;
+  CEF_AFTERCREATED       = WM_APP + $A03;
+  CEF_PENDINGRESIZE      = WM_APP + $A04;
+  CEF_PUMPHAVEWORK       = WM_APP + $A05;
+  CEF_DESTROY            = WM_APP + $A06;
+  CEF_DOONBEFORECLOSE    = WM_APP + $A07;
 
-  CEF_USER_TIMER_MINIMUM = $0000000A;
-  CEF_USER_TIMER_MAXIMUM = $7FFFFFFF;
+  CEF_TIMER_MINIMUM            = $0000000A;
+  CEF_TIMER_MAXIMUM            = $7FFFFFFF;
+  CEF_TIMER_MAXDELAY           = 1000 div 30; // 30fps
+  CEF_TIMER_DEPLETEWORK_CYCLES = 10;
+  CEF_TIMER_DEPLETEWORK_DELAY  = 50;
+
+  CEF4DELPHI_URL = 'https://github.com/salvadordf/CEF4Delphi';
+  CRLF           = #13 + #10;
 
 implementation
 
 end.
+
+

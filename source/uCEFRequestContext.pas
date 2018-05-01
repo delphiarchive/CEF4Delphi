@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -48,39 +48,45 @@ interface
 
 uses
   {$IFDEF DELPHI16_UP}
-  System.Classes,
+  System.Classes, System.SysUtils,
   {$ELSE}
-  Classes,
+  Classes, SysUtils,
   {$ENDIF}
   uCEFBaseRefCounted, uCEFInterfaces, uCEFTypes;
 
 type
   TCefRequestContextRef = class(TCefBaseRefCountedRef, ICefRequestContext)
     protected
-      function IsSame(const other: ICefRequestContext): Boolean;
-      function IsSharingWith(const other: ICefRequestContext): Boolean;
-      function IsGlobal: Boolean;
-      function GetHandler: ICefRequestContextHandler;
-      function GetCachePath: ustring;
-      function GetDefaultCookieManager(const callback: ICefCompletionCallback): ICefCookieManager;
-      function GetDefaultCookieManagerProc(const callback: TCefCompletionCallbackProc): ICefCookieManager;
-      function RegisterSchemeHandlerFactory(const schemeName, domainName: ustring; const factory: ICefSchemeHandlerFactory): Boolean;
-      function ClearSchemeHandlerFactories: Boolean;
+      function  IsSame(const other: ICefRequestContext): Boolean;
+      function  IsSharingWith(const other: ICefRequestContext): Boolean;
+      function  IsGlobal: Boolean;
+      function  GetHandler: ICefRequestContextHandler;
+      function  GetCachePath: ustring;
+      function  GetDefaultCookieManager(const callback: ICefCompletionCallback): ICefCookieManager;
+      function  GetDefaultCookieManagerProc(const callback: TCefCompletionCallbackProc): ICefCookieManager;
+      function  RegisterSchemeHandlerFactory(const schemeName, domainName: ustring; const factory: ICefSchemeHandlerFactory): Boolean;
+      function  ClearSchemeHandlerFactories: Boolean;
       procedure PurgePluginListCache(reloadPages: Boolean);
-      function HasPreference(const name: ustring): Boolean;
-      function GetPreference(const name: ustring): ICefValue;
-      function GetAllPreferences(includeDefaults: Boolean): ICefDictionaryValue;
-      function CanSetPreference(const name: ustring): Boolean;
-      function SetPreference(const name: ustring; const value: ICefValue; out error: ustring): Boolean;
+      function  HasPreference(const name: ustring): Boolean;
+      function  GetPreference(const name: ustring): ICefValue;
+      function  GetAllPreferences(includeDefaults: Boolean): ICefDictionaryValue;
+      function  CanSetPreference(const name: ustring): Boolean;
+      function  SetPreference(const name: ustring; const value: ICefValue; out error: ustring): Boolean;
       procedure ClearCertificateExceptions(const callback: ICefCompletionCallback);
       procedure CloseAllConnections(const callback: ICefCompletionCallback);
       procedure ResolveHost(const origin: ustring; const callback: ICefResolveCallback);
-      function ResolveHostCached(const origin: ustring; resolvedIps: TStrings): TCefErrorCode;
+      function  ResolveHostCached(const origin: ustring; const resolvedIps: TStrings): TCefErrorCode;
+      procedure LoadExtension(const root_directory: ustring; const manifest: ICefDictionaryValue; const handler: ICefExtensionHandler);
+      function  DidLoadExtension(const extension_id: ustring): boolean;
+      function  HasExtension(const extension_id: ustring): boolean;
+      function  GetExtensions(const extension_ids: TStringList): boolean;
+      function  GetExtension(const extension_id: ustring): ICefExtension;
 
     public
       class function UnWrap(data: Pointer): ICefRequestContext;
       class function Global: ICefRequestContext;
-      class function New(const settings: PCefRequestContextSettings; const handler: ICefRequestContextHandler): ICefRequestContext;
+      class function New(const settings: PCefRequestContextSettings; const handler: ICefRequestContextHandler = nil): ICefRequestContext; overload;
+      class function New(const aCache, aAcceptLanguageList : ustring; aPersistSessionCookies, aPersistUserPreferences, aIgnoreCertificateErrors, aEnableNetSecurityExpiration : boolean; const handler: ICefRequestContextHandler = nil): ICefRequestContext; overload;
       class function Shared(const other: ICefRequestContext; const handler: ICefRequestContextHandler): ICefRequestContext;
   end;
 
@@ -88,7 +94,7 @@ implementation
 
 uses
   uCEFMiscFunctions, uCEFLibFunctions, uCEFValue, uCEFDictionaryValue, uCEFCookieManager,
-  uCEFCompletionCallback, uCEFRequestContextHandler;
+  uCEFCompletionCallback, uCEFRequestContextHandler, uCEFExtension, uCEFStringList;
 
 function TCefRequestContextRef.ClearSchemeHandlerFactories: Boolean;
 begin
@@ -100,16 +106,12 @@ begin
   Result := CefStringFreeAndGet(PCefRequestContext(FData).get_cache_path(FData));
 end;
 
-function TCefRequestContextRef.GetDefaultCookieManager(
-  const callback: ICefCompletionCallback): ICefCookieManager;
+function TCefRequestContextRef.GetDefaultCookieManager(const callback: ICefCompletionCallback): ICefCookieManager;
 begin
-  Result := TCefCookieManagerRef.UnWrap(
-    PCefRequestContext(FData).get_default_cookie_manager(
-      FData, CefGetData(callback)));
+  Result := TCefCookieManagerRef.UnWrap(PCefRequestContext(FData).get_default_cookie_manager(FData, CefGetData(callback)));
 end;
 
-function TCefRequestContextRef.GetDefaultCookieManagerProc(
-  const callback: TCefCompletionCallbackProc): ICefCookieManager;
+function TCefRequestContextRef.GetDefaultCookieManagerProc(const callback: TCefCompletionCallbackProc): ICefCookieManager;
 begin
   Result := GetDefaultCookieManager(TCefFastCompletionCallback.Create(callback));
 end;
@@ -121,29 +123,49 @@ end;
 
 class function TCefRequestContextRef.Global: ICefRequestContext;
 begin
-  Result:= UnWrap(cef_request_context_get_global_context());
+  Result := UnWrap(cef_request_context_get_global_context());
 end;
 
 function TCefRequestContextRef.IsGlobal: Boolean;
 begin
-  Result:= PCefRequestContext(FData).is_global(FData) <> 0;
+  Result := PCefRequestContext(FData).is_global(FData) <> 0;
 end;
 
 function TCefRequestContextRef.IsSame(const other: ICefRequestContext): Boolean;
 begin
-  Result:= PCefRequestContext(FData).is_same(FData, CefGetData(other)) <> 0;
+  Result := PCefRequestContext(FData).is_same(FData, CefGetData(other)) <> 0;
 end;
 
-function TCefRequestContextRef.IsSharingWith(
-  const other: ICefRequestContext): Boolean;
+function TCefRequestContextRef.IsSharingWith(const other: ICefRequestContext): Boolean;
 begin
-  Result:= PCefRequestContext(FData).is_sharing_with(FData, CefGetData(other)) <> 0;
+  Result := PCefRequestContext(FData).is_sharing_with(FData, CefGetData(other)) <> 0;
 end;
 
 class function TCefRequestContextRef.New(const settings: PCefRequestContextSettings;
                                          const handler: ICefRequestContextHandler): ICefRequestContext;
 begin
   Result := UnWrap(cef_request_context_create_context(settings, CefGetData(handler)));
+end;
+
+class function TCefRequestContextRef.New(const aCache                       : ustring;
+                                         const aAcceptLanguageList          : ustring;
+                                               aPersistSessionCookies       : boolean;
+                                               aPersistUserPreferences      : boolean;
+                                               aIgnoreCertificateErrors     : boolean;
+                                               aEnableNetSecurityExpiration : boolean;
+                                         const handler                      : ICefRequestContextHandler): ICefRequestContext;
+var
+  TempSettings : TCefRequestContextSettings;
+begin
+  TempSettings.size                           := SizeOf(TCefRequestContextSettings);
+  TempSettings.cache_path                     := CefString(aCache);
+  TempSettings.persist_session_cookies        := Ord(aPersistSessionCookies);
+  TempSettings.persist_user_preferences       := Ord(aPersistUserPreferences);
+  TempSettings.ignore_certificate_errors      := Ord(aIgnoreCertificateErrors);
+  TempSettings.enable_net_security_expiration := Ord(aEnableNetSecurityExpiration);
+  TempSettings.accept_language_list           := CefString(aAcceptLanguageList);
+
+  Result := UnWrap(cef_request_context_create_context(@TempSettings, CefGetData(handler)));
 end;
 
 procedure TCefRequestContextRef.PurgePluginListCache(reloadPages: Boolean);
@@ -153,17 +175,17 @@ end;
 
 function TCefRequestContextRef.HasPreference(const name: ustring): Boolean;
 var
-  n: TCefString;
+  n : TCefString;
 begin
-  n := CefString(name);
+  n      := CefString(name);
   Result := PCefRequestContext(FData).has_preference(FData, @n) <> 0;
 end;
 
 function TCefRequestContextRef.GetPreference(const name: ustring): ICefValue;
 var
-  n: TCefString;
+  n : TCefString;
 begin
-  n := CefString(name);
+  n      := CefString(name);
   Result :=  TCefValueRef.UnWrap(PCefRequestContext(FData).get_preference(FData, @n));
 end;
 
@@ -176,18 +198,20 @@ function TCefRequestContextRef.CanSetPreference(const name: ustring): Boolean;
 var
   n: TCefString;
 begin
-  n := CefString(name);
+  n      := CefString(name);
   Result := PCefRequestContext(FData).can_set_preference(FData, @n) <> 0;
 end;
 
-function TCefRequestContextRef.SetPreference(const name: ustring; const value: ICefValue; out error: ustring): Boolean;
+function TCefRequestContextRef.SetPreference(const name  : ustring;
+                                             const value : ICefValue;
+                                             out   error : ustring): Boolean;
 var
   n, e: TCefString;
 begin
   n := CefString(name);
   FillChar(e, SizeOf(e), 0);
   Result := PCefRequestContext(FData).set_preference(FData, @n, CefGetData(value), @e) <> 0;
-  error := CefString(@e);
+  error  := CefString(@e);
 end;
 
 procedure TCefRequestContextRef.ClearCertificateExceptions(const callback: ICefCompletionCallback);
@@ -200,8 +224,8 @@ begin
   PCefRequestContext(FData).close_all_connections(FData, CefGetData(callback));
 end;
 
-procedure TCefRequestContextRef.ResolveHost(const origin: ustring;
-  const callback: ICefResolveCallback);
+procedure TCefRequestContextRef.ResolveHost(const origin   : ustring;
+                                            const callback : ICefResolveCallback);
 var
   o: TCefString;
 begin
@@ -209,49 +233,86 @@ begin
   PCefRequestContext(FData).resolve_host(FData, @o, CefGetData(callback));
 end;
 
-function TCefRequestContextRef.ResolveHostCached(const origin: ustring;
-  resolvedIps: TStrings): TCefErrorCode;
+function TCefRequestContextRef.ResolveHostCached(const origin      : ustring;
+                                                 const resolvedIps : TStrings): TCefErrorCode;
 var
-  ips: TCefStringList;
-  o, str: TCefString;
-  i: Integer;
+  TempSL     : ICefStringList;
+  TempOrigin : TCefString;
 begin
-  ips := cef_string_list_alloc;
-  try
-    o := CefString(origin);
-    Result := PCefRequestContext(FData).resolve_host_cached(FData, @o, ips);
-    if Assigned(ips) then
-      for i := 0 to cef_string_list_size(ips) - 1 do
-      begin
-        FillChar(str, SizeOf(str), 0);
-        cef_string_list_value(ips, i, @str);
-        resolvedIps.Add(CefStringClearAndGet(str));
-      end;
-  finally
-    cef_string_list_free(ips);
-  end;
+  TempSL     := TCefStringListOwn.Create;
+  TempOrigin := CefString(origin);
+  Result     := PCefRequestContext(FData).resolve_host_cached(FData, @TempOrigin, TempSL.Handle);
+  TempSL.CopyToStrings(resolvedIps);
 end;
 
-function TCefRequestContextRef.RegisterSchemeHandlerFactory(const schemeName,
-  domainName: ustring; const factory: ICefSchemeHandlerFactory): Boolean;
+procedure TCefRequestContextRef.LoadExtension(const root_directory: ustring; const manifest: ICefDictionaryValue; const handler: ICefExtensionHandler);
+var
+  TempDir : TCefString;
+begin
+  TempDir := CefString(root_directory);
+  PCefRequestContext(FData).load_extension(FData, @TempDir, CefGetData(manifest), CefGetData(handler));
+end;
+
+function TCefRequestContextRef.DidLoadExtension(const extension_id: ustring): boolean;
+var
+  TempID : TCefString;
+begin
+  TempID := CefString(extension_id);
+  Result := PCefRequestContext(FData).did_load_extension(FData, @TempID) <> 0;
+end;
+
+function TCefRequestContextRef.HasExtension(const extension_id: ustring): boolean;
+var
+  TempID : TCefString;
+begin
+  TempID := CefString(extension_id);
+  Result := PCefRequestContext(FData).has_extension(FData, @TempID) <> 0;
+end;
+
+function TCefRequestContextRef.GetExtensions(const extension_ids: TStringList): boolean;
+var
+  TempSL : ICefStringList;
+begin
+  Result := False;
+  TempSL := TCefStringListOwn.Create;
+
+  if (PCefRequestContext(FData).get_extensions(PCefRequestContext(FData), TempSL.Handle) <> 0) then
+    begin
+      TempSL.CopyToStrings(extension_ids);
+      Result := True;
+    end;
+end;
+
+function TCefRequestContextRef.GetExtension(const extension_id: ustring): ICefExtension;
+var
+  TempID : TCefString;
+begin
+  TempID := CefString(extension_id);
+  Result := TCefExtensionRef.UnWrap(PCefRequestContext(FData).get_extension(FData, @TempID));
+end;
+
+function TCefRequestContextRef.RegisterSchemeHandlerFactory(const schemeName : ustring;
+                                                            const domainName : ustring;
+                                                            const factory    : ICefSchemeHandlerFactory): Boolean;
 var
   s, d: TCefString;
 begin
-  s := CefString(schemeName);
-  d := CefString(domainName);
+  s      := CefString(schemeName);
+  d      := CefString(domainName);
   Result := PCefRequestContext(FData).register_scheme_handler_factory(FData, @s, @d, CefGetData(factory)) <> 0;
 end;
 
-class function TCefRequestContextRef.Shared(const other: ICefRequestContext;
-  const handler: ICefRequestContextHandler): ICefRequestContext;
+class function TCefRequestContextRef.Shared(const other   : ICefRequestContext;
+                                            const handler : ICefRequestContextHandler): ICefRequestContext;
 begin
   Result := UnWrap(cef_create_context_shared(CefGetData(other), CefGetData(handler)));
 end;
 
 class function TCefRequestContextRef.UnWrap(data: Pointer): ICefRequestContext;
 begin
-  if data <> nil then
-    Result := Create(data) as ICefRequestContext else
+  if (data <> nil) then
+    Result := Create(data) as ICefRequestContext
+   else
     Result := nil;
 end;
 

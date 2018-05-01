@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -52,8 +52,8 @@ uses
 type
   TCefV8AccessorOwn = class(TCefBaseRefCountedOwn, ICefV8Accessor)
     protected
-      function Get(const name: ustring; const obj: ICefv8Value; out value: ICefv8Value; const exception: ustring): Boolean; virtual;
-      function Put(const name: ustring; const obj, value: ICefv8Value; const exception: ustring): Boolean; virtual;
+      function Get(const name: ustring; const obj: ICefv8Value; out retval: ICefv8Value; var exception: ustring): Boolean; virtual;
+      function Put(const name: ustring; const obj, value: ICefv8Value; var exception: ustring): Boolean; virtual;
 
     public
       constructor Create; virtual;
@@ -64,8 +64,8 @@ type
       FGetter: TCefV8AccessorGetterProc;
       FSetter: TCefV8AccessorSetterProc;
 
-      function Get(const name: ustring; const obj: ICefv8Value; out value: ICefv8Value; const exception: ustring): Boolean; override;
-      function Put(const name: ustring; const obj, value: ICefv8Value; const exception: ustring): Boolean; override;
+      function Get(const name: ustring; const obj: ICefv8Value; out retval: ICefv8Value; var exception: ustring): Boolean; override;
+      function Put(const name: ustring; const obj, value: ICefv8Value; var exception: ustring): Boolean; override;
 
     public
       constructor Create(const getter: TCefV8AccessorGetterProc; const setter: TCefV8AccessorSetterProc); reintroduce;
@@ -76,17 +76,50 @@ implementation
 uses
   uCEFMiscFunctions, uCEFLibFunctions, uCEFv8Value;
 
-function cef_v8_accessor_get(self: PCefV8Accessor; const name: PCefString; obj: PCefv8Value; out retval: PCefv8Value; exception: PCefString): Integer; stdcall;
+function cef_v8_accessor_get(      self      : PCefV8Accessor;
+                             const name      : PCefString;
+                                   obj       : PCefv8Value;
+                             out   retval    : PCefv8Value;
+                                   exception : PCefString): Integer; stdcall;
 var
-  ret: ICefv8Value;
+  ret : ICefv8Value;
+  TempExcept : ustring;
+  TempObject : TObject;
 begin
-  Result := Ord(TCefV8AccessorOwn(CefGetObject(self)).Get(CefString(name), TCefv8ValueRef.UnWrap(obj), ret, CefString(exception)));
-  retval := CefGetData(ret);
+  Result     := Ord(False);
+  TempExcept := CefString(exception);
+  TempObject := CefGetObject(self);
+
+  if (TempObject <> nil) and (TempObject is TCefV8AccessorOwn) then
+    Result := Ord(TCefV8AccessorOwn(TempObject).Get(CefString(name),
+                                                    TCefv8ValueRef.UnWrap(obj),
+                                                    ret,
+                                                    TempExcept));
+
+  retval     := CefGetData(ret);
+  exception^ := CefString(TempExcept);
 end;
 
-function cef_v8_accessor_put(self: PCefV8Accessor; const name: PCefString; obj: PCefv8Value; value: PCefv8Value; exception: PCefString): Integer; stdcall;
+function cef_v8_accessor_put(      self      : PCefV8Accessor;
+                             const name      : PCefString;
+                                   obj       : PCefv8Value;
+                                   value     : PCefv8Value;
+                                   exception : PCefString): Integer; stdcall;
+var
+  TempExcept : ustring;
+  TempObject : TObject;
 begin
-  Result := Ord(TCefV8AccessorOwn(CefGetObject(self)).Put(CefString(name), TCefv8ValueRef.UnWrap(obj), TCefv8ValueRef.UnWrap(value), CefString(exception)));
+  Result     := Ord(False);
+  TempExcept := CefString(exception);
+  TempObject := CefGetObject(self);
+
+  if (TempObject <> nil) and (TempObject is TCefV8AccessorOwn) then
+    Result := Ord(TCefV8AccessorOwn(TempObject).Put(CefString(name),
+                                                    TCefv8ValueRef.UnWrap(obj),
+                                                    TCefv8ValueRef.UnWrap(value),
+                                                    TempExcept));
+
+  exception^ := CefString(TempExcept);
 end;
 
 // TCefV8AccessorOwn
@@ -94,18 +127,17 @@ end;
 constructor TCefV8AccessorOwn.Create;
 begin
   inherited CreateData(SizeOf(TCefV8Accessor));
+
   PCefV8Accessor(FData)^.get := cef_v8_accessor_get;
   PCefV8Accessor(FData)^.put := cef_v8_accessor_put;
 end;
 
-function TCefV8AccessorOwn.Get(const name: ustring; const obj: ICefv8Value;
-  out value: ICefv8Value; const exception: ustring): Boolean;
+function TCefV8AccessorOwn.Get(const name: ustring; const obj: ICefv8Value; out retval: ICefv8Value; var exception: ustring): Boolean;
 begin
   Result := False;
 end;
 
-function TCefV8AccessorOwn.Put(const name: ustring; const obj,
-  value: ICefv8Value; const exception: ustring): Boolean;
+function TCefV8AccessorOwn.Put(const name: ustring; const obj, value: ICefv8Value; var exception: ustring): Boolean;
 begin
   Result := False;
 end;
@@ -118,19 +150,19 @@ begin
   FSetter := setter;
 end;
 
-function TCefFastV8Accessor.Get(const name: ustring; const obj: ICefv8Value;
-  out value: ICefv8Value; const exception: ustring): Boolean;
+function TCefFastV8Accessor.Get(const name: ustring; const obj: ICefv8Value; out retval: ICefv8Value; var exception: ustring): Boolean;
 begin
-  if Assigned(FGetter)  then
-    Result := FGetter(name, obj, value, exception) else
+  if Assigned(FGetter) then
+    Result := FGetter(name, obj, retval, exception)
+   else
     Result := False;
 end;
 
-function TCefFastV8Accessor.Put(const name: ustring; const obj,
-  value: ICefv8Value; const exception: ustring): Boolean;
+function TCefFastV8Accessor.Put(const name: ustring; const obj, value: ICefv8Value; var exception: ustring): Boolean;
 begin
-  if Assigned(FSetter)  then
-    Result := FSetter(name, obj, value, exception) else
+  if Assigned(FSetter) then
+    Result := FSetter(name, obj, value, exception)
+   else
     Result := False;
 end;
 

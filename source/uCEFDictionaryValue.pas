@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -48,9 +48,9 @@ interface
 
 uses
   {$IFDEF DELPHI16_UP}
-  System.Classes,
+  System.Classes, System.SysUtils,
   {$ELSE}
-  Classes,
+  Classes, SysUtils,
   {$ENDIF}
   uCEFBaseRefCounted, uCEFInterfaces, uCEFTypes;
 
@@ -95,15 +95,14 @@ type
 implementation
 
 uses
-  uCEFMiscFunctions, uCEFLibFunctions, uCEFBinaryValue, uCEFListValue, uCEFValue;
+  uCEFMiscFunctions, uCEFLibFunctions, uCEFBinaryValue, uCEFListValue, uCEFValue, uCEFStringList;
 
 function TCefDictionaryValueRef.Clear: Boolean;
 begin
   Result := PCefDictionaryValue(FData).clear(PCefDictionaryValue(FData)) <> 0;
 end;
 
-function TCefDictionaryValueRef.Copy(
-  excludeEmptyChildren: Boolean): ICefDictionaryValue;
+function TCefDictionaryValueRef.Copy(excludeEmptyChildren: Boolean): ICefDictionaryValue;
 begin
   Result := UnWrap(PCefDictionaryValue(FData).copy(PCefDictionaryValue(FData), Ord(excludeEmptyChildren)));
 end;
@@ -124,8 +123,7 @@ begin
   Result := PCefDictionaryValue(FData).get_bool(PCefDictionaryValue(FData), @k) <> 0;
 end;
 
-function TCefDictionaryValueRef.GetDictionary(
-  const key: ustring): ICefDictionaryValue;
+function TCefDictionaryValueRef.GetDictionary(const key: ustring): ICefDictionaryValue;
 var
   k: TCefString;
 begin
@@ -149,25 +147,22 @@ begin
   Result := PCefDictionaryValue(FData).get_int(PCefDictionaryValue(FData), @k);
 end;
 
-function TCefDictionaryValueRef.GetKeys(const keys: TStrings): Boolean;
+function TCefDictionaryValueRef.GetKeys(const keys : TStrings): Boolean;
 var
-  list: TCefStringList;
-  i: Integer;
-  str: TCefString;
+  TempSL : ICefStringList;
 begin
-  list := cef_string_list_alloc;
-  try
-    Result := PCefDictionaryValue(FData).get_keys(PCefDictionaryValue(FData), list) <> 0;
-    FillChar(str, SizeOf(str), 0);
-    for i := 0 to cef_string_list_size(list) - 1 do
+  Result := False;
+
+  if (keys <> nil) then
     begin
-      FillChar(str, SizeOf(str), 0);
-      cef_string_list_value(list, i, @str);
-      keys.Add(CefStringClearAndGet(str));
+      TempSL := TCefStringListOwn.Create;
+
+      if (PCefDictionaryValue(FData).get_keys(PCefDictionaryValue(FData), TempSL.Handle) <> 0) then
+        begin
+          TempSL.CopyToStrings(keys);
+          Result := True;
+        end;
     end;
-  finally
-    cef_string_list_free(list);
-  end;
 end;
 
 function TCefDictionaryValueRef.GetList(const key: ustring): ICefListValue;
@@ -255,8 +250,7 @@ begin
   Result := PCefDictionaryValue(FData).remove(PCefDictionaryValue(FData), @k) <> 0;
 end;
 
-function TCefDictionaryValueRef.SetBinary(const key: ustring;
-  const value: ICefBinaryValue): Boolean;
+function TCefDictionaryValueRef.SetBinary(const key: ustring; const value: ICefBinaryValue): Boolean;
 var
   k: TCefString;
 begin
@@ -264,8 +258,7 @@ begin
   Result := PCefDictionaryValue(FData).set_binary(PCefDictionaryValue(FData), @k, CefGetData(value)) <> 0;
 end;
 
-function TCefDictionaryValueRef.SetBool(const key: ustring;
-  value: Boolean): Boolean;
+function TCefDictionaryValueRef.SetBool(const key: ustring; value: Boolean): Boolean;
 var
   k: TCefString;
 begin
@@ -273,8 +266,7 @@ begin
   Result := PCefDictionaryValue(FData).set_bool(PCefDictionaryValue(FData), @k, Ord(value)) <> 0;
 end;
 
-function TCefDictionaryValueRef.SetDictionary(const key: ustring;
-  const value: ICefDictionaryValue): Boolean;
+function TCefDictionaryValueRef.SetDictionary(const key: ustring; const value: ICefDictionaryValue): Boolean;
 var
   k: TCefString;
 begin
@@ -291,8 +283,7 @@ begin
   Result := PCefDictionaryValue(FData).set_double(PCefDictionaryValue(FData), @k, value) <> 0;
 end;
 
-function TCefDictionaryValueRef.SetInt(const key: ustring;
-  value: Integer): Boolean;
+function TCefDictionaryValueRef.SetInt(const key: ustring; value: Integer): Boolean;
 var
   k: TCefString;
 begin
@@ -300,8 +291,7 @@ begin
   Result := PCefDictionaryValue(FData).set_int(PCefDictionaryValue(FData), @k, value) <> 0;
 end;
 
-function TCefDictionaryValueRef.SetList(const key: ustring;
-  const value: ICefListValue): Boolean;
+function TCefDictionaryValueRef.SetList(const key: ustring; const value: ICefListValue): Boolean;
 var
   k: TCefString;
 begin

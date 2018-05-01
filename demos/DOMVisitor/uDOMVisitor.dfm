@@ -12,6 +12,8 @@ object DOMVisitorFrm: TDOMVisitorFrm
   Font.Style = []
   OldCreateOrder = False
   Position = poScreenCenter
+  OnCloseQuery = FormCloseQuery
+  OnCreate = FormCreate
   OnShow = FormShow
   PixelsPerInch = 96
   TextHeight = 13
@@ -22,7 +24,6 @@ object DOMVisitorFrm: TDOMVisitorFrm
     Height = 530
     Align = alClient
     TabOrder = 0
-    ExplicitHeight = 549
   end
   object AddressBarPnl: TPanel
     Left = 0
@@ -40,26 +41,45 @@ object DOMVisitorFrm: TDOMVisitorFrm
     ParentDoubleBuffered = False
     ShowCaption = False
     TabOrder = 1
-    object GoBtn: TButton
-      Left = 842
-      Top = 5
-      Width = 31
-      Height = 20
-      Margins.Left = 5
-      Align = alRight
-      Caption = 'Go'
-      TabOrder = 0
-      OnClick = GoBtnClick
-    end
     object AddressEdt: TEdit
       Left = 5
       Top = 5
-      Width = 837
-      Height = 20
-      Align = alClient
-      TabOrder = 1
+      Width = 764
+      Height = 21
+      TabOrder = 0
       Text = 'https://www.google.com'
-      ExplicitHeight = 21
+    end
+    object Panel1: TPanel
+      Left = 759
+      Top = 5
+      Width = 114
+      Height = 20
+      Align = alRight
+      BevelOuter = bvNone
+      Padding.Left = 5
+      ShowCaption = False
+      TabOrder = 1
+      object GoBtn: TButton
+        Left = 5
+        Top = 0
+        Width = 31
+        Height = 20
+        Margins.Left = 5
+        Align = alLeft
+        Caption = 'Go'
+        TabOrder = 0
+        OnClick = GoBtnClick
+      end
+      object VisitDOMBtn: TButton
+        Left = 39
+        Top = 0
+        Width = 75
+        Height = 20
+        Align = alRight
+        Caption = 'Visit DOM'
+        TabOrder = 1
+        OnClick = VisitDOMBtnClick
+      end
     end
   end
   object StatusBar1: TStatusBar
@@ -71,16 +91,23 @@ object DOMVisitorFrm: TDOMVisitorFrm
       item
         Width = 50
       end>
-    ExplicitLeft = 584
-    ExplicitTop = 552
-    ExplicitWidth = 0
   end
   object Chromium1: TChromium
     OnProcessMessageReceived = Chromium1ProcessMessageReceived
     OnBeforeContextMenu = Chromium1BeforeContextMenu
     OnContextMenuCommand = Chromium1ContextMenuCommand
+    OnBeforePopup = Chromium1BeforePopup
     OnAfterCreated = Chromium1AfterCreated
+    OnBeforeClose = Chromium1BeforeClose
+    OnClose = Chromium1Close
     Left = 16
     Top = 40
+  end
+  object Timer1: TTimer
+    Enabled = False
+    Interval = 300
+    OnTimer = Timer1Timer
+    Left = 16
+    Top = 96
   end
 end

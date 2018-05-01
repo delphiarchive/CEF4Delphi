@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -48,44 +48,65 @@ interface
 
 uses
   {$IFDEF DELPHI16_UP}
-  System.Classes,
+  System.Classes, System.SysUtils,
   {$ELSE}
-  Classes,
+  Classes, SysUtils,
   {$ENDIF}
   uCEFBaseRefCounted, uCEFInterfaces, uCEFTypes;
 
 type
   TCefResolveCallbackOwn = class(TCefBaseRefCountedOwn, ICefResolveCallback)
-  protected
-    procedure OnResolveCompleted(result: TCefErrorCode; resolvedIps: TStrings); virtual; abstract;
-  public
-    constructor Create; virtual;
+    protected
+      procedure OnResolveCompleted(result: TCefErrorCode; const resolvedIps: TStrings); virtual; abstract;
+
+    public
+      constructor Create; virtual;
+  end;
+
+  TCefCustomResolveCallback = class(TCefResolveCallbackOwn)
+    protected
+      FEvents : Pointer;
+
+      procedure OnResolveCompleted(result: TCefErrorCode; const resolvedIps: TStrings); override;
+
+    public
+      constructor Create(const aEvents : IChromiumEvents); reintroduce;
+      destructor  Destroy; override;
   end;
 
 implementation
 
 uses
-  uCEFMiscFunctions, uCEFLibFunctions;
+  uCEFMiscFunctions, uCEFLibFunctions, uCEFStringList;
 
-procedure cef_resolve_callback_on_resolve_completed(self: PCefResolveCallback;
-  result: TCefErrorCode; resolved_ips: TCefStringList); stdcall;
+procedure cef_resolve_callback_on_resolve_completed(self         : PCefResolveCallback;
+                                                    result       : TCefErrorCode;
+                                                    resolved_ips : TCefStringList); stdcall;
 var
-  list: TStringList;
-  i: Integer;
-  str: TCefString;
+  TempSL     : TStringList;
+  TempCefSL  : ICefStringList;
+  TempObject : TObject;
 begin
-  list := TStringList.Create;
+  TempSL := nil;
+
   try
-    for i := 0 to cef_string_list_size(resolved_ips) - 1 do
-    begin
-      FillChar(str, SizeOf(str), 0);
-      cef_string_list_value(resolved_ips, i, @str);
-      list.Add(CefStringClearAndGet(str));
+    try
+      TempObject := CefGetObject(self);
+
+      if (TempObject <> nil) and (TempObject is TCefResolveCallbackOwn) then
+        begin
+          TempSL    := TStringList.Create;
+          TempCefSL := TCefStringListRef.Create(resolved_ips);
+          TempCefSL.CopyToStrings(TempSL);
+
+          TCefResolveCallbackOwn(TempObject).OnResolveCompleted(result, TempSL);
+        end;
+    except
+      on e : exception do
+        if CustomExceptionHandler('cef_resolve_callback_on_resolve_completed', e) then raise;
     end;
-    with TCefResolveCallbackOwn(CefGetObject(self)) do
-      OnResolveCompleted(result, list);
   finally
-    list.Free;
+    if (TempSL <> nil) then FreeAndNil(TempSL);
   end;
 end;
 
@@ -93,9 +114,39 @@ end;
 
 constructor TCefResolveCallbackOwn.Create;
 begin
-  CreateData(SizeOf(TCefResolveCallback), False);
-  with PCefResolveCallback(FData)^ do
-    on_resolve_completed := cef_resolve_callback_on_resolve_completed;
+  inherited CreateData(SizeOf(TCefResolveCallback));
+
+  PCefResolveCallback(FData).on_resolve_completed := cef_resolve_callback_on_resolve_completed;
+end;
+
+// TCefCustomResolveCallback
+
+constructor TCefCustomResolveCallback.Create(const aEvents : IChromiumEvents);
+begin
+  inherited Create;
+
+  FEvents := Pointer(aEvents);
+end;
+
+destructor TCefCustomResolveCallback.Destroy;
+begin
+  FEvents := nil;
+
+  inherited Destroy;
+end;
+
+procedure TCefCustomResolveCallback.OnResolveCompleted(result: TCefErrorCode; const resolvedIps: TStrings);
+begin
+  try
+    try
+      if (FEvents <> nil) then IChromiumEvents(FEvents).doResolvedHostAvailable(result, resolvedIps);
+    except
+      on e : exception do
+        if CustomExceptionHandler('TCefCustomResolveCallback.OnResolveCompleted', e) then raise;
+    end;
+  finally
+    FEvents := nil;
+  end;
 end;
 
 end.

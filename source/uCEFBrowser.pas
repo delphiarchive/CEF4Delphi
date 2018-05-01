@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -48,9 +48,9 @@ interface
 
 uses
   {$IFDEF DELPHI16_UP}
-  System.Classes,
+  System.Classes, System.SysUtils,
   {$ELSE}
-  Classes,
+  Classes, SysUtils,
   {$ENDIF}
   uCEFBaseRefCounted, uCEFInterfaces, uCEFTypes;
 
@@ -72,11 +72,11 @@ type
       function  HasDocument: Boolean;
       function  GetMainFrame: ICefFrame;
       function  GetFocusedFrame: ICefFrame;
-      function  GetFrameByident(identifier: Int64): ICefFrame;
+      function  GetFrameByident(const identifier: Int64): ICefFrame;
       function  GetFrame(const name: ustring): ICefFrame;
       function  GetFrameCount: NativeUInt;
-      procedure GetFrameIdentifiers(count: PNativeUInt; identifiers: PInt64);
-      procedure GetFrameNames(names: TStrings);
+      function  GetFrameIdentifiers(var aFrameCount : NativeUInt; var aFrameIdentifierArray : TCefFrameIdentifierArray) : boolean;
+      function  GetFrameNames(var aFrameNames : TStrings) : boolean;
       function  SendProcessMessage(targetProcess: TCefProcessId; const ProcMessage: ICefProcessMessage): Boolean;
 
     public
@@ -94,9 +94,9 @@ type
       function  HasView: Boolean;
       function  GetRequestContext: ICefRequestContext;
       function  GetZoomLevel: Double;
-      procedure SetZoomLevel(zoomLevel: Double);
-      procedure RunFileDialog(mode: TCefFileDialogMode; const title, defaultFilePath: ustring; acceptFilters: TStrings; selectedAcceptFilter: Integer; const callback: ICefRunFileDialogCallback);
-      procedure RunFileDialogProc(mode: TCefFileDialogMode; const title, defaultFilePath: ustring; acceptFilters: TStrings; selectedAcceptFilter: Integer; const callback: TCefRunFileDialogCallbackProc);
+      procedure SetZoomLevel(const zoomLevel: Double);
+      procedure RunFileDialog(mode: TCefFileDialogMode; const title, defaultFilePath: ustring; const acceptFilters: TStrings; selectedAcceptFilter: Integer; const callback: ICefRunFileDialogCallback);
+      procedure RunFileDialogProc(mode: TCefFileDialogMode; const title, defaultFilePath: ustring; const acceptFilters: TStrings; selectedAcceptFilter: Integer; const callback: TCefRunFileDialogCallbackProc);
       procedure StartDownload(const url: ustring);
       procedure DownloadImage(const imageUrl: ustring; isFavicon: Boolean; maxImageSize: Cardinal; bypassCache: Boolean; const callback: ICefDownloadImageCallback);
       procedure DownloadImageProc(const imageUrl: ustring; isFavicon: Boolean; maxImageSize: Cardinal; bypassCache: Boolean; const callback: TOnDownloadImageFinishedProc);
@@ -126,7 +126,7 @@ type
       procedure SendFocusEvent(setFocus: Boolean);
       procedure SendCaptureLostEvent;
       procedure NotifyMoveOrResizeStarted;
-      function  GetWindowlessFrameRate(): Integer;
+      function  GetWindowlessFrameRate : Integer;
       procedure SetWindowlessFrameRate(frameRate: Integer);
       procedure IMESetComposition(const text: ustring; underlinesCount : NativeUInt; const underlines : PCefCompositionUnderline; const replacement_range, selection_range : PCefRange);
       procedure IMECommitText(const text: ustring; const replacement_range : PCefRange; relative_cursor_pos : integer);
@@ -140,6 +140,9 @@ type
       procedure DragSourceSystemDragEnded;
       function  GetVisibleNavigationEntry : ICefNavigationEntry;
       procedure SetAccessibilityState(accessibilityState: TCefState);
+      procedure SetAutoResizeEnabled(enabled: boolean; const min_size, max_size: PCefSize);
+      function  GetExtension : ICefExtension;
+      function  IsBackgroundHost : boolean;
 
     public
       class function UnWrap(data: Pointer): ICefBrowserHost;
@@ -149,7 +152,8 @@ implementation
 
 uses
   uCEFMiscFunctions, uCEFLibFunctions, uCEFDownloadImageCallBack, uCEFFrame, uCEFPDFPrintCallback,
-  uCEFRunFileDialogCallback, uCEFRequestContext, uCEFNavigationEntryVisitor, uCEFNavigationEntry;
+  uCEFRunFileDialogCallback, uCEFRequestContext, uCEFNavigationEntryVisitor, uCEFNavigationEntry,
+  uCEFExtension, uCEFStringList;
 
 function TCefBrowserRef.GetHost: ICefBrowserHost;
 begin
@@ -171,7 +175,7 @@ begin
   Result := TCefFrameRef.UnWrap(PCefBrowser(FData)^.get_focused_frame(PCefBrowser(FData)));
 end;
 
-function TCefBrowserRef.GetFrameByident(identifier: Int64): ICefFrame;
+function TCefBrowserRef.GetFrameByident(const identifier: Int64): ICefFrame;
 begin
   Result := TCefFrameRef.UnWrap(PCefBrowser(FData)^.get_frame_byident(PCefBrowser(FData), identifier));
 end;
@@ -189,30 +193,46 @@ begin
   Result := PCefBrowser(FData)^.get_frame_count(PCefBrowser(FData));
 end;
 
-procedure TCefBrowserRef.GetFrameIdentifiers(count: PNativeUInt; identifiers: PInt64);
+function TCefBrowserRef.GetFrameIdentifiers(var aFrameCount : NativeUInt; var aFrameIdentifierArray : TCefFrameIdentifierArray) : boolean;
+var
+  i : NativeUInt;
 begin
-  PCefBrowser(FData)^.get_frame_identifiers(PCefBrowser(FData), count, identifiers);
+  Result := False;
+
+  try
+    if (aFrameCount > 0) then
+      begin
+        SetLength(aFrameIdentifierArray, aFrameCount);
+        i := 0;
+        while (i < aFrameCount) do
+          begin
+            aFrameIdentifierArray[i] := 0;
+            inc(i);
+          end;
+
+        PCefBrowser(FData)^.get_frame_identifiers(PCefBrowser(FData), aFrameCount, aFrameIdentifierArray[0]);
+
+        Result := True;
+      end;
+  except
+    on e : exception do
+      if CustomExceptionHandler('TCefBrowserRef.GetFrameIdentifiers', e) then raise;
+  end;
 end;
 
-procedure TCefBrowserRef.GetFrameNames(names: TStrings);
+function TCefBrowserRef.GetFrameNames(var aFrameNames : TStrings) : boolean;
 var
-  list: TCefStringList;
-  i: Integer;
-  str: TCefString;
+  TempSL : ICefStringList;
 begin
-  list := cef_string_list_alloc;
-  try
-    PCefBrowser(FData)^.get_frame_names(PCefBrowser(FData), list);
-    FillChar(str, SizeOf(str), 0);
-    for i := 0 to cef_string_list_size(list) - 1 do
+  Result := False;
+
+  if (aFrameNames <> nil) then
     begin
-      FillChar(str, SizeOf(str), 0);
-      cef_string_list_value(list, i, @str);
-      names.Add(CefStringClearAndGet(str));
+      TempSL := TCefStringListOwn.Create;
+      PCefBrowser(FData)^.get_frame_names(PCefBrowser(FData), TempSL.Handle);
+      TempSL.CopyToStrings(aFrameNames);
+      Result := True;
     end;
-  finally
-    cef_string_list_free(list);
-  end;
 end;
 
 function TCefBrowserRef.SendProcessMessage(targetProcess: TCefProcessId; const ProcMessage: ICefProcessMessage): Boolean;
@@ -290,23 +310,25 @@ begin
   PCefBrowserHost(FData).close_dev_tools(FData);
 end;
 
-procedure TCefBrowserHostRef.DownloadImage(const imageUrl: ustring;
-  isFavicon: Boolean; maxImageSize: Cardinal; bypassCache: Boolean;
-  const callback: ICefDownloadImageCallback);
+procedure TCefBrowserHostRef.DownloadImage(const imageUrl     : ustring;
+                                                 isFavicon    : Boolean;
+                                                 maxImageSize : Cardinal;
+                                                 bypassCache  : Boolean;
+                                           const callback     : ICefDownloadImageCallback);
 var
   url: TCefString;
 begin
   url := CefString(imageUrl);
-  PCefBrowserHost(FData).download_image(FData, @url, Ord(isFavicon), maxImageSize,
-    Ord(bypassCache), CefGetData(callback));
+  PCefBrowserHost(FData).download_image(FData, @url, Ord(isFavicon), maxImageSize, Ord(bypassCache), CefGetData(callback));
 end;
 
-procedure TCefBrowserHostRef.DownloadImageProc(const imageUrl: ustring;
-  isFavicon: Boolean; maxImageSize: Cardinal; bypassCache: Boolean;
-  const callback: TOnDownloadImageFinishedProc);
+procedure TCefBrowserHostRef.DownloadImageProc(const imageUrl     : ustring;
+                                                     isFavicon    : Boolean;
+                                                     maxImageSize : Cardinal;
+                                                     bypassCache  : Boolean;
+                                               const callback     : TOnDownloadImageFinishedProc);
 begin
-  DownloadImage(imageUrl, isFavicon, maxImageSize, bypassCache,
-    TCefFastDownloadImageCallback.Create(callback));
+  DownloadImage(imageUrl, isFavicon, maxImageSize, bypassCache, TCefFastDownloadImageCallback.Create(callback));
 end;
 
 procedure TCefBrowserHostRef.DragSourceEndedAt(x, y: Integer; op: TCefDragOperation);
@@ -327,6 +349,21 @@ end;
 procedure TCefBrowserHostRef.SetAccessibilityState(accessibilityState: TCefState);
 begin
   PCefBrowserHost(FData).set_accessibility_state(FData, accessibilityState);
+end;
+
+procedure TCefBrowserHostRef.SetAutoResizeEnabled(enabled: boolean; const min_size, max_size: PCefSize);
+begin
+  PCefBrowserHost(FData).set_auto_resize_enabled(FData, Ord(enabled), min_size, max_size);
+end;
+
+function TCefBrowserHostRef.GetExtension : ICefExtension;
+begin
+  Result := TCefExtensionRef.UnWrap(PCefBrowserHost(FData).get_extension(FData));
+end;
+
+function TCefBrowserHostRef.IsBackgroundHost : boolean;
+begin
+  Result := PCefBrowserHost(FData).is_background_host(FData) <> 0;
 end;
 
 procedure TCefBrowserHostRef.DragTargetDragEnter(const dragData: ICefDragData;
@@ -351,8 +388,7 @@ begin
   PCefBrowserHost(FData).drag_target_drop(FData, event);
 end;
 
-procedure TCefBrowserHostRef.Find(identifier: Integer;
-  const searchText: ustring; forward, matchCase, findNext: Boolean);
+procedure TCefBrowserHostRef.Find(identifier: Integer; const searchText: ustring; forward, matchCase, findNext: Boolean);
 var
   s: TCefString;
 begin
@@ -370,8 +406,9 @@ begin
   PCefBrowserHost(FData).print(FData);
 end;
 
-procedure TCefBrowserHostRef.PrintToPdf(const path: ustring;
-  settings: PCefPdfPrintSettings; const callback: ICefPdfPrintCallback);
+procedure TCefBrowserHostRef.PrintToPdf(const path     : ustring;
+                                              settings : PCefPdfPrintSettings;
+                                        const callback : ICefPdfPrintCallback);
 var
   str: TCefString;
 begin
@@ -379,8 +416,9 @@ begin
   PCefBrowserHost(FData).print_to_pdf(FData, @str, settings, CefGetData(callback));
 end;
 
-procedure TCefBrowserHostRef.PrintToPdfProc(const path: ustring;
-  settings: PCefPdfPrintSettings; const callback: TOnPdfPrintFinishedProc);
+procedure TCefBrowserHostRef.PrintToPdfProc(const path     : ustring;
+                                                  settings : PCefPdfPrintSettings;
+                                            const callback : TOnPdfPrintFinishedProc);
 begin
   PrintToPdf(path, settings, TCefFastPdfPrintCallback.Create(callback));
 end;
@@ -393,37 +431,43 @@ begin
   PCefBrowserHost(FData).replace_misspelling(FData, @str);
 end;
 
-procedure TCefBrowserHostRef.RunFileDialog(mode: TCefFileDialogMode;
-  const title, defaultFilePath: ustring; acceptFilters: TStrings;
-  selectedAcceptFilter: Integer; const callback: ICefRunFileDialogCallback);
+procedure TCefBrowserHostRef.RunFileDialog(      mode                 : TCefFileDialogMode;
+                                           const title                : ustring;
+                                           const defaultFilePath      : ustring;
+                                           const acceptFilters        : TStrings;
+                                                 selectedAcceptFilter : Integer;
+                                           const callback             : ICefRunFileDialogCallback);
 var
-  t, f: TCefString;
-  list: TCefStringList;
-  item: TCefString;
-  i: Integer;
+  TempTitle, TempPath : TCefString;
+  TempAcceptFilters : ICefStringList;
 begin
-  t := CefString(title);
-  f := CefString(defaultFilePath);
-  list := cef_string_list_alloc();
   try
-    for i := 0 to acceptFilters.Count - 1 do
-    begin
-      item := CefString(acceptFilters[i]);
-      cef_string_list_append(list, @item);
-    end;
-    PCefBrowserHost(FData).run_file_dialog(PCefBrowserHost(FData), mode, @t, @f,
-      list, selectedAcceptFilter, CefGetData(callback));
+    TempTitle := CefString(title);
+    TempPath  := CefString(defaultFilePath);
+
+    TempAcceptFilters := TCefStringListOwn.Create;
+    TempAcceptFilters.AddStrings(acceptFilters);
+
+    PCefBrowserHost(FData).run_file_dialog(PCefBrowserHost(FData),
+                                           mode,
+                                           @TempTitle,
+                                           @TempPath,
+                                           TempAcceptFilters.Handle,
+                                           selectedAcceptFilter,
+                                           CefGetData(callback));
   finally
-    cef_string_list_free(list);
+    TempAcceptFilters := nil;
   end;
 end;
 
-procedure TCefBrowserHostRef.RunFileDialogProc(mode: TCefFileDialogMode;
-  const title, defaultFilePath: ustring; acceptFilters: TStrings;
-  selectedAcceptFilter: Integer; const callback: TCefRunFileDialogCallbackProc);
+procedure TCefBrowserHostRef.RunFileDialogProc(      mode                 : TCefFileDialogMode;
+                                               const title                : ustring;
+                                               const defaultFilePath      : ustring;
+                                               const acceptFilters        : TStrings;
+                                                     selectedAcceptFilter : Integer;
+                                               const callback             : TCefRunFileDialogCallbackProc);
 begin
-  RunFileDialog(mode, title, defaultFilePath, acceptFilters, selectedAcceptFilter,
-    TCefFastRunFileDialogCallback.Create(callback));
+  RunFileDialog(mode, title, defaultFilePath, acceptFilters, selectedAcceptFilter, TCefFastRunFileDialogCallback.Create(callback));
 end;
 
 procedure TCefBrowserHostRef.AddWordToDictionary(const word: ustring);
@@ -454,20 +498,20 @@ begin
   PCefBrowserHost(FData).send_key_event(FData, event);
 end;
 
-procedure TCefBrowserHostRef.SendMouseClickEvent(const event: PCefMouseEvent;
-  kind: TCefMouseButtonType; mouseUp: Boolean; clickCount: Integer);
+procedure TCefBrowserHostRef.SendMouseClickEvent(const event      : PCefMouseEvent;
+                                                       kind       : TCefMouseButtonType;
+                                                       mouseUp    : Boolean;
+                                                       clickCount : Integer);
 begin
   PCefBrowserHost(FData).send_mouse_click_event(FData, event, kind, Ord(mouseUp), clickCount);
 end;
 
-procedure TCefBrowserHostRef.SendMouseMoveEvent(const event: PCefMouseEvent;
-  mouseLeave: Boolean);
+procedure TCefBrowserHostRef.SendMouseMoveEvent(const event: PCefMouseEvent; mouseLeave: Boolean);
 begin
   PCefBrowserHost(FData).send_mouse_move_event(FData, event, Ord(mouseLeave));
 end;
 
-procedure TCefBrowserHostRef.SendMouseWheelEvent(const event: PCefMouseEvent;
-  deltaX, deltaY: Integer);
+procedure TCefBrowserHostRef.SendMouseWheelEvent(const event: PCefMouseEvent; deltaX, deltaY: Integer);
 begin
   PCefBrowserHost(FData).send_mouse_wheel_event(FData, event, deltaX, deltaY);
 end;
@@ -507,14 +551,12 @@ begin
   Result := TCefRequestContextRef.UnWrap(PCefBrowserHost(FData).get_request_context(FData));
 end;
 
-procedure TCefBrowserHostRef.GetNavigationEntries(
-  const visitor: ICefNavigationEntryVisitor; currentOnly: Boolean);
+procedure TCefBrowserHostRef.GetNavigationEntries(const visitor: ICefNavigationEntryVisitor; currentOnly: Boolean);
 begin
   PCefBrowserHost(FData).get_navigation_entries(FData, CefGetData(visitor), Ord(currentOnly));
 end;
 
-procedure TCefBrowserHostRef.GetNavigationEntriesProc(
-  const proc: TCefNavigationEntryVisitorProc; currentOnly: Boolean);
+procedure TCefBrowserHostRef.GetNavigationEntriesProc(const proc: TCefNavigationEntryVisitorProc; currentOnly: Boolean);
 begin
   GetNavigationEntries(TCefFastNavigationEntryVisitor.Create(proc), currentOnly);
 end;
@@ -524,7 +566,11 @@ begin
   Result := PCefBrowserHost(FData).get_zoom_level(PCefBrowserHost(FData));
 end;
 
-procedure TCefBrowserHostRef.IMESetComposition(const text: ustring; underlinesCount : NativeUInt; const underlines : PCefCompositionUnderline; const replacement_range, selection_range : PCefRange);
+procedure TCefBrowserHostRef.IMESetComposition(const text              : ustring;
+                                                     underlinesCount   : NativeUInt;
+                                               const underlines        : PCefCompositionUnderline;
+                                               const replacement_range : PCefRange;
+                                               const selection_range   : PCefRange);
 var
   TempString : TCefString;
 begin
@@ -585,17 +631,17 @@ begin
   PCefBrowserHost(FData).notify_screen_info_changed(PCefBrowserHost(FData));
 end;
 
-procedure TCefBrowserHostRef.SetZoomLevel(zoomLevel: Double);
+procedure TCefBrowserHostRef.SetZoomLevel(const zoomLevel: Double);
 begin
   PCefBrowserHost(FData).set_zoom_level(PCefBrowserHost(FData), zoomLevel);
 end;
 
-procedure TCefBrowserHostRef.ShowDevTools(const windowInfo: PCefWindowInfo;
-  const client: ICefClient; const settings: PCefBrowserSettings;
-  inspectElementAt: PCefPoint);
+procedure TCefBrowserHostRef.ShowDevTools(const windowInfo       : PCefWindowInfo;
+                                          const client           : ICefClient;
+                                          const settings         : PCefBrowserSettings;
+                                                inspectElementAt : PCefPoint);
 begin
-  PCefBrowserHost(FData).show_dev_tools(FData, windowInfo, CefGetData(client),
-    settings, inspectElementAt);
+  PCefBrowserHost(FData).show_dev_tools(FData, windowInfo, CefGetData(client), settings, inspectElementAt);
 end;
 
 procedure TCefBrowserHostRef.StartDownload(const url: ustring);

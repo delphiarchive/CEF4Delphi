@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -58,7 +58,7 @@ type
       constructor Create; virtual;
   end;
 
-  TCefFastStringVisitor = class(TCefStringVisitorOwn, ICefStringVisitor)
+  TCefFastStringVisitor = class(TCefStringVisitorOwn)
     protected
       FVisit: TCefStringVisitorProc;
 
@@ -70,22 +70,34 @@ type
 
   TCustomCefStringVisitor = class(TCefStringVisitorOwn)
     protected
-      FChromiumBrowser : TObject;
+      FEvents : Pointer;
 
       procedure Visit(const str: ustring); override;
 
     public
-      constructor Create(const aChromiumBrowser : TObject); reintroduce;
+      constructor Create(const aEvents : IChromiumEvents); reintroduce;
+      destructor  Destroy; override;
   end;
 
 implementation
 
 uses
-  uCEFMiscFunctions, uCEFLibFunctions, uCEFChromium;
+  {$IFDEF DELPHI16_UP}
+  System.SysUtils,
+  {$ELSE}
+  SysUtils,
+  {$ENDIF}
+  uCEFMiscFunctions, uCEFLibFunctions;
 
-procedure cef_string_visitor_visit(self: PCefStringVisitor; const str: PCefString); stdcall;
+procedure cef_string_visitor_visit(      self : PCefStringVisitor;
+                                   const str  : PCefString); stdcall;
+var
+  TempObject : TObject;
 begin
-  TCefStringVisitorOwn(CefGetObject(self)).Visit(CefString(str));
+  TempObject := CefGetObject(self);
+
+  if (TempObject <> nil) and (TempObject is TCefStringVisitorOwn) then
+    TCefStringVisitorOwn(TempObject).Visit(CefString(str));
 end;
 
 // TCefStringVisitorOwn
@@ -118,17 +130,32 @@ end;
 
 // TCustomCefStringVisitor
 
-constructor TCustomCefStringVisitor.Create(const aChromiumBrowser : TObject);
+constructor TCustomCefStringVisitor.Create(const aEvents : IChromiumEvents);
 begin
   inherited Create;
 
-  FChromiumBrowser := aChromiumBrowser;
+  FEvents := Pointer(aEvents);
+end;
+
+destructor TCustomCefStringVisitor.Destroy;
+begin
+  FEvents := nil;
+
+  inherited Destroy;
 end;
 
 procedure TCustomCefStringVisitor.Visit(const str: ustring);
 begin
-  if (FChromiumBrowser <> nil) and (FChromiumBrowser is TChromium) then
-    TChromium(FChromiumBrowser).Internal_TextResultAvailable(str);
+  try
+    try
+      if (FEvents <> nil) then IChromiumEvents(FEvents).doTextResultAvailable(str);
+    except
+      on e : exception do
+        if CustomExceptionHandler('TCustomCefStringVisitor.Visit', e) then raise;
+    end;
+  finally
+    FEvents := nil;
+  end;
 end;
 
 end.

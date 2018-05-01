@@ -1,9 +1,10 @@
 object MainForm: TMainForm
   Left = 194
   Top = 111
-  Caption = 'MDI Application'
+  Cursor = crAppStart
+  Caption = 'Initializing browser. Please wait...'
   ClientHeight = 631
-  ClientWidth = 709
+  ClientWidth = 1097
   Color = clAppWorkSpace
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clBlack
@@ -14,17 +15,20 @@ object MainForm: TMainForm
   OldCreateOrder = False
   Position = poScreenCenter
   OnCreate = FormCreate
+  OnShow = FormShow
   PixelsPerInch = 96
   TextHeight = 13
   object ButtonPnl: TPanel
     Left = 0
     Top = 0
-    Width = 709
+    Width = 1097
     Height = 30
     Align = alTop
     BevelOuter = bvNone
+    Enabled = False
     ShowCaption = False
     TabOrder = 0
+    ExplicitWidth = 933
     object NewBtn: TSpeedButton
       Left = 4
       Top = 4
@@ -68,6 +72,14 @@ object MainForm: TMainForm
         0333337F777FFFFF7F3333000000000003333377777777777333}
       NumGlyphs = 2
       OnClick = ExitBtnClick
+    end
+    object NewContextChk: TCheckBox
+      Left = 192
+      Top = 8
+      Width = 257
+      Height = 17
+      Caption = 'Create a new request context for new browsers'
+      TabOrder = 0
     end
   end
 end

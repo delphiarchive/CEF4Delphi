@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -44,48 +44,47 @@ interface
 uses
   {$IFDEF DELPHI16_UP}
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
-  Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.ExtCtrls, Vcl.AppEvnts,
+  System.SyncObjs, Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls,
+  Vcl.ExtCtrls, Vcl.AppEvnts,
   {$ELSE}
-  Windows, Messages, SysUtils, Variants, Classes,
+  Windows, Messages, SysUtils, Variants, Classes, SyncObjs,
   Graphics, Controls, Forms, Dialogs, StdCtrls, ExtCtrls, AppEvnts,
   {$ENDIF}
-  GR32_Image, // You need the Graphics32 components for this demo available at http://graphics32.org
-  uCEFChromium, uCEFTypes, uCEFInterfaces;
-
-const
-  MINIBROWSER_CREATED       = WM_APP + $100;
+  uCEFChromium, uCEFTypes, uCEFInterfaces, uCEFConstants, uBufferPanel;
 
 type
   TForm1 = class(TForm)
     NavControlPnl: TPanel;
     chrmosr: TChromium;
     AppEvents: TApplicationEvents;
-    Panel1: TPanel;    // This is just a quick and dirty hack to receive some events that the PaintBox can't receive.
-    PaintBox: TPaintBox32;
     ComboBox1: TComboBox;
     Panel2: TPanel;
     GoBtn: TButton;
+    SnapshotBtn: TButton;
+    SaveDialog1: TSaveDialog;
+    Timer1: TTimer;
+    Panel1: TBufferPanel;
 
     procedure AppEventsMessage(var Msg: tagMSG; var Handled: Boolean);
 
     procedure GoBtnClick(Sender: TObject);
+    procedure GoBtnEnter(Sender: TObject);
 
     procedure Panel1Enter(Sender: TObject);
     procedure Panel1Exit(Sender: TObject);
+    procedure Panel1Resize(Sender: TObject);
+    procedure Panel1Click(Sender: TObject);
+    procedure Panel1MouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure Panel1MouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure Panel1MouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+    procedure Panel1MouseLeave(Sender: TObject);
 
-    procedure FormShow(Sender: TObject);
-    procedure FormHide(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
+    procedure FormShow(Sender: TObject);
+    procedure FormHide(Sender: TObject);
     procedure FormAfterMonitorDpiChanged(Sender: TObject; OldDPI, NewDPI: Integer);
-
-    procedure PaintBoxClick(Sender: TObject);
-    procedure PaintBoxResize(Sender: TObject);
-    procedure PaintBoxMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
-    procedure PaintBoxMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
-    procedure PaintBoxMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
-    procedure PaintBoxMouseWheel(Sender: TObject; Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
-    procedure PaintBoxMouseLeave(Sender: TObject);
+    procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
 
     procedure chrmosrPaint(Sender: TObject; const browser: ICefBrowser; kind: TCefPaintElementType; dirtyRectsCount: NativeUInt; const dirtyRects: PCefRectArray; const buffer: Pointer; width, height: Integer);
     procedure chrmosrCursorChange(Sender: TObject; const browser: ICefBrowser; cursor: HICON; cursorType: TCefCursorType; const customCursorInfo: PCefCursorInfo);
@@ -95,16 +94,45 @@ type
     procedure chrmosrPopupShow(Sender: TObject; const browser: ICefBrowser; show: Boolean);
     procedure chrmosrPopupSize(Sender: TObject; const browser: ICefBrowser; const rect: PCefRect);
     procedure chrmosrAfterCreated(Sender: TObject; const browser: ICefBrowser);
+    procedure chrmosrTooltip(Sender: TObject; const browser: ICefBrowser; var text: ustring; out Result: Boolean);
+    procedure chrmosrBeforePopup(Sender: TObject; const browser: ICefBrowser; const frame: ICefFrame; const targetUrl, targetFrameName: ustring; targetDisposition: TCefWindowOpenDisposition; userGesture: Boolean; const popupFeatures: TCefPopupFeatures; var windowInfo: TCefWindowInfo; var client: ICefClient; var settings: TCefBrowserSettings; var noJavascriptAccess: Boolean; var Result: Boolean);
+    procedure chrmosrClose(Sender: TObject; const browser: ICefBrowser; out Result: Boolean);
+    procedure chrmosrBeforeClose(Sender: TObject; const browser: ICefBrowser);
 
-  private
+    procedure SnapshotBtnClick(Sender: TObject);
+    procedure Timer1Timer(Sender: TObject);
+    procedure SnapshotBtnEnter(Sender: TObject);
+    procedure ComboBox1Enter(Sender: TObject);
+
+  protected
+    FPopUpBitmap     : TBitmap;
+    FPopUpRect       : TRect;
+    FShowPopUp       : boolean;
+    FResizing        : boolean;
+    FPendingResize   : boolean;
+    FCanClose        : boolean;
+    FClosing         : boolean;
+    FResizeCS        : TCriticalSection;
+
+    FLastClickCount  : integer;
+    FLastClickTime   : integer;
+    FLastClickPoint  : TPoint;
+    FLastClickButton : TMouseButton;
+
     function  getModifiers(Shift: TShiftState): TCefEventFlags;
     function  GetButton(Button: TMouseButton): TCefMouseButtonType;
+    procedure DoResize;
+    procedure InitializeLastClick;
+    function  CancelPreviousClick(x, y : integer; var aCurrentTime : integer) : boolean;
 
     procedure WMMove(var aMessage : TWMMove); message WM_MOVE;
     procedure WMMoving(var aMessage : TMessage); message WM_MOVING;
     procedure WMCaptureChanged(var aMessage : TMessage); message WM_CAPTURECHANGED;
     procedure WMCancelMode(var aMessage : TMessage); message WM_CANCELMODE;
-    procedure BrowserCreatedMsg(var aMessage : TMessage); message MINIBROWSER_CREATED;
+    procedure WMEnterMenuLoop(var aMessage: TMessage); message WM_ENTERMENULOOP;
+    procedure WMExitMenuLoop(var aMessage: TMessage); message WM_EXITMENULOOP;
+    procedure BrowserCreatedMsg(var aMessage : TMessage); message CEF_AFTERCREATED;
+    procedure PendingResizeMsg(var aMessage : TMessage); message CEF_PENDINGRESIZE;
 
   public
     { Public declarations }
@@ -118,124 +146,181 @@ implementation
 {$R *.dfm}
 
 uses
-  uCEFMiscFunctions, uCEFConstants, uCEFApplication;
+  {$IFDEF DELPHI16_UP}
+  System.Math,
+  {$ELSE}
+  Math,
+  {$ENDIF}
+  uCEFMiscFunctions, uCEFApplication;
+
+// This is the destruction sequence in OSR mode :
+// 1- FormCloseQuery sets CanClose to the initial FCanClose value (False) and calls chrmosr.CloseBrowser(True).
+// 2- chrmosr.CloseBrowser(True) will trigger chrmosr.OnClose and we have to
+//    set "Result" to false and CEF3 will destroy the internal browser immediately.
+// 3- chrmosr.OnBeforeClose is triggered because the internal browser was destroyed.
+//    Now we set FCanClose to True and send WM_CLOSE to the form.
 
 procedure TForm1.AppEventsMessage(var Msg: tagMSG; var Handled: Boolean);
 var
-  TempEvent : TCefKeyEvent;
+  TempKeyEvent   : TCefKeyEvent;
+  TempMouseEvent : TCefMouseEvent;
 begin
   case Msg.message of
     WM_SYSCHAR :
-      if (Panel1.Focused or chrmosr.FrameIsFocused) and
-         (Msg.wParam in [VK_BACK..VK_HELP]) then
+      if Panel1.Focused then
         begin
-          TempEvent.kind                    := KEYEVENT_CHAR;
-          TempEvent.modifiers               := GetCefKeyboardModifiers(Msg.wParam, Msg.lParam);
-          TempEvent.windows_key_code        := Msg.wParam;
-          TempEvent.native_key_code         := Msg.lParam;
-          TempEvent.is_system_key           := ord(True);
-          TempEvent.character               := #0;
-          TempEvent.unmodified_character    := #0;
-          TempEvent.focus_on_editable_field := ord(False);
+          TempKeyEvent.kind                    := KEYEVENT_CHAR;
+          TempKeyEvent.modifiers               := GetCefKeyboardModifiers(Msg.wParam, Msg.lParam);
+          TempKeyEvent.windows_key_code        := Msg.wParam;
+          TempKeyEvent.native_key_code         := Msg.lParam;
+          TempKeyEvent.is_system_key           := ord(True);
+          TempKeyEvent.character               := #0;
+          TempKeyEvent.unmodified_character    := #0;
+          TempKeyEvent.focus_on_editable_field := ord(False);
 
-          chrmosr.SendKeyEvent(@TempEvent);
+          chrmosr.SendKeyEvent(@TempKeyEvent);
           Handled := True;
         end;
 
     WM_SYSKEYDOWN :
-      if (Panel1.Focused or chrmosr.FrameIsFocused) and
-         (Msg.wParam in [VK_BACK..VK_HELP]) then
+      if Panel1.Focused then
         begin
-          TempEvent.kind                    := KEYEVENT_RAWKEYDOWN;
-          TempEvent.modifiers               := GetCefKeyboardModifiers(Msg.wParam, Msg.lParam);
-          TempEvent.windows_key_code        := Msg.wParam;
-          TempEvent.native_key_code         := Msg.lParam;
-          TempEvent.is_system_key           := ord(True);
-          TempEvent.character               := #0;
-          TempEvent.unmodified_character    := #0;
-          TempEvent.focus_on_editable_field := ord(False);
+          TempKeyEvent.kind                    := KEYEVENT_RAWKEYDOWN;
+          TempKeyEvent.modifiers               := GetCefKeyboardModifiers(Msg.wParam, Msg.lParam);
+          TempKeyEvent.windows_key_code        := Msg.wParam;
+          TempKeyEvent.native_key_code         := Msg.lParam;
+          TempKeyEvent.is_system_key           := ord(True);
+          TempKeyEvent.character               := #0;
+          TempKeyEvent.unmodified_character    := #0;
+          TempKeyEvent.focus_on_editable_field := ord(False);
 
-          chrmosr.SendKeyEvent(@TempEvent);
+          chrmosr.SendKeyEvent(@TempKeyEvent);
           Handled := True;
         end;
 
     WM_SYSKEYUP :
-      if (Panel1.Focused or chrmosr.FrameIsFocused) and
-         (Msg.wParam in [VK_BACK..VK_HELP]) then
+      if Panel1.Focused then
         begin
-          TempEvent.kind                    := KEYEVENT_KEYUP;
-          TempEvent.modifiers               := GetCefKeyboardModifiers(Msg.wParam, Msg.lParam);
-          TempEvent.windows_key_code        := Msg.wParam;
-          TempEvent.native_key_code         := Msg.lParam;
-          TempEvent.is_system_key           := ord(True);
-          TempEvent.character               := #0;
-          TempEvent.unmodified_character    := #0;
-          TempEvent.focus_on_editable_field := ord(False);
+          TempKeyEvent.kind                    := KEYEVENT_KEYUP;
+          TempKeyEvent.modifiers               := GetCefKeyboardModifiers(Msg.wParam, Msg.lParam);
+          TempKeyEvent.windows_key_code        := Msg.wParam;
+          TempKeyEvent.native_key_code         := Msg.lParam;
+          TempKeyEvent.is_system_key           := ord(True);
+          TempKeyEvent.character               := #0;
+          TempKeyEvent.unmodified_character    := #0;
+          TempKeyEvent.focus_on_editable_field := ord(False);
 
-          chrmosr.SendKeyEvent(@TempEvent);
+          chrmosr.SendKeyEvent(@TempKeyEvent);
           Handled := True;
         end;
 
     WM_KEYDOWN :
-      if (Panel1.Focused or chrmosr.FrameIsFocused) and
-         (Msg.wParam in [VK_BACK..VK_HELP]) then
+      if Panel1.Focused then
         begin
-          TempEvent.kind                    := KEYEVENT_RAWKEYDOWN;
-          TempEvent.modifiers               := GetCefKeyboardModifiers(Msg.wParam, Msg.lParam);
-          TempEvent.windows_key_code        := Msg.wParam;
-          TempEvent.native_key_code         := Msg.lParam;
-          TempEvent.is_system_key           := ord(False);
-          TempEvent.character               := #0;
-          TempEvent.unmodified_character    := #0;
-          TempEvent.focus_on_editable_field := ord(False);
+          TempKeyEvent.kind                    := KEYEVENT_RAWKEYDOWN;
+          TempKeyEvent.modifiers               := GetCefKeyboardModifiers(Msg.wParam, Msg.lParam);
+          TempKeyEvent.windows_key_code        := Msg.wParam;
+          TempKeyEvent.native_key_code         := Msg.lParam;
+          TempKeyEvent.is_system_key           := ord(False);
+          TempKeyEvent.character               := #0;
+          TempKeyEvent.unmodified_character    := #0;
+          TempKeyEvent.focus_on_editable_field := ord(False);
 
-          chrmosr.SendKeyEvent(@TempEvent);
-          Handled := True;
+          chrmosr.SendKeyEvent(@TempKeyEvent);
+          Handled := (Msg.wParam = VK_TAB);
         end;
 
     WM_KEYUP :
-      if (Panel1.Focused or chrmosr.FrameIsFocused) and
-         (Msg.wParam in [VK_BACK..VK_HELP]) then
+      if Panel1.Focused then
         begin
-          TempEvent.kind                    := KEYEVENT_KEYUP;
-          TempEvent.modifiers               := GetCefKeyboardModifiers(Msg.wParam, Msg.lParam);
-          TempEvent.windows_key_code        := Msg.wParam;
-          TempEvent.native_key_code         := Msg.lParam;
-          TempEvent.is_system_key           := ord(False);
-          TempEvent.character               := #0;
-          TempEvent.unmodified_character    := #0;
-          TempEvent.focus_on_editable_field := ord(False);
+          TempKeyEvent.kind                    := KEYEVENT_KEYUP;
+          TempKeyEvent.modifiers               := GetCefKeyboardModifiers(Msg.wParam, Msg.lParam);
+          TempKeyEvent.windows_key_code        := Msg.wParam;
+          TempKeyEvent.native_key_code         := Msg.lParam;
+          TempKeyEvent.is_system_key           := ord(False);
+          TempKeyEvent.character               := #0;
+          TempKeyEvent.unmodified_character    := #0;
+          TempKeyEvent.focus_on_editable_field := ord(False);
 
-          chrmosr.SendKeyEvent(@TempEvent);
+          chrmosr.SendKeyEvent(@TempKeyEvent);
           Handled := True;
         end;
 
     WM_CHAR :
-      if Panel1.Focused or chrmosr.FrameIsFocused then
+      if Panel1.Focused then
         begin
-          TempEvent.kind                    := KEYEVENT_CHAR;
-          TempEvent.modifiers               := GetCefKeyboardModifiers(Msg.wParam, Msg.lParam);
-          TempEvent.windows_key_code        := Msg.wParam;
-          TempEvent.native_key_code         := Msg.lParam;
-          TempEvent.is_system_key           := ord(False);
-          TempEvent.character               := #0;
-          TempEvent.unmodified_character    := #0;
-          TempEvent.focus_on_editable_field := ord(False);
+          TempKeyEvent.kind                    := KEYEVENT_CHAR;
+          TempKeyEvent.modifiers               := GetCefKeyboardModifiers(Msg.wParam, Msg.lParam);
+          TempKeyEvent.windows_key_code        := Msg.wParam;
+          TempKeyEvent.native_key_code         := Msg.lParam;
+          TempKeyEvent.is_system_key           := ord(False);
+          TempKeyEvent.character               := #0;
+          TempKeyEvent.unmodified_character    := #0;
+          TempKeyEvent.focus_on_editable_field := ord(False);
 
-          chrmosr.SendKeyEvent(@TempEvent);
+          chrmosr.SendKeyEvent(@TempKeyEvent);
           Handled := True;
+        end;
+
+    WM_MOUSEWHEEL :
+      if Panel1.Focused and (GlobalCEFApp <> nil) then
+        begin
+          TempMouseEvent.x         := Msg.lParam and $FFFF;
+          TempMouseEvent.y         := Msg.lParam shr 16;
+          TempMouseEvent.modifiers := GetCefMouseModifiers(Msg.wParam);
+          DeviceToLogical(TempMouseEvent, GlobalCEFApp.DeviceScaleFactor);
+          chrmosr.SendMouseWheelEvent(@TempMouseEvent, 0, int16(Msg.wParam shr 16));
         end;
   end;
 end;
 
 procedure TForm1.GoBtnClick(Sender: TObject);
 begin
+  FResizeCS.Acquire;
+  FResizing      := False;
+  FPendingResize := False;
+  FResizeCS.Release;
+
   chrmosr.LoadURL(ComboBox1.Text);
+end;
+
+procedure TForm1.GoBtnEnter(Sender: TObject);
+begin
+  chrmosr.SendFocusEvent(False);
 end;
 
 procedure TForm1.chrmosrAfterCreated(Sender: TObject; const browser: ICefBrowser);
 begin
-  PostMessage(Handle, MINIBROWSER_CREATED, 0, 0);
+  PostMessage(Handle, CEF_AFTERCREATED, 0, 0);
+end;
+
+procedure TForm1.chrmosrBeforeClose(Sender: TObject; const browser: ICefBrowser);
+begin
+  FCanClose := True;
+  PostMessage(Handle, WM_CLOSE, 0, 0);
+end;
+
+procedure TForm1.chrmosrBeforePopup(Sender : TObject;
+                                    const browser            : ICefBrowser;
+                                    const frame              : ICefFrame;
+                                    const targetUrl          : ustring;
+                                    const targetFrameName    : ustring;
+                                          targetDisposition  : TCefWindowOpenDisposition;
+                                          userGesture        : Boolean;
+                                    const popupFeatures      : TCefPopupFeatures;
+                                    var   windowInfo         : TCefWindowInfo;
+                                    var   client             : ICefClient;
+                                    var   settings           : TCefBrowserSettings;
+                                    var   noJavascriptAccess : Boolean;
+                                    var   Result             : Boolean);
+begin
+  // For simplicity, this demo blocks all popup windows and new tabs
+  Result := (targetDisposition in [WOD_NEW_FOREGROUND_TAB, WOD_NEW_BACKGROUND_TAB, WOD_NEW_POPUP, WOD_NEW_WINDOW]);
+end;
+
+procedure TForm1.chrmosrClose(Sender: TObject; const browser: ICefBrowser; out Result: Boolean);
+begin
+  Result := False;
 end;
 
 procedure TForm1.chrmosrCursorChange(Sender : TObject;
@@ -244,12 +329,13 @@ procedure TForm1.chrmosrCursorChange(Sender : TObject;
                                            cursorType       : TCefCursorType;
                                      const customCursorInfo : PCefCursorInfo);
 begin
-  PaintBox.Cursor := GefCursorToWindowsCursor(cursorType);
+  Panel1.Cursor := GefCursorToWindowsCursor(cursorType);
 end;
 
-procedure TForm1.chrmosrGetScreenInfo(Sender: TObject;
-  const browser: ICefBrowser; var screenInfo: TCefScreenInfo;
-  out Result: Boolean);
+procedure TForm1.chrmosrGetScreenInfo(Sender : TObject;
+                                      const browser    : ICefBrowser;
+                                      var   screenInfo : TCefScreenInfo;
+                                      out   Result     : Boolean);
 var
   TempRect : TCEFRect;
 begin
@@ -257,8 +343,8 @@ begin
     begin
       TempRect.x      := 0;
       TempRect.y      := 0;
-      TempRect.width  := DeviceToLogical(PaintBox.Width,  GlobalCEFApp.DeviceScaleFactor);
-      TempRect.height := DeviceToLogical(PaintBox.Height, GlobalCEFApp.DeviceScaleFactor);
+      TempRect.width  := DeviceToLogical(Panel1.Width,  GlobalCEFApp.DeviceScaleFactor);
+      TempRect.height := DeviceToLogical(Panel1.Height, GlobalCEFApp.DeviceScaleFactor);
 
       screenInfo.device_scale_factor := GlobalCEFApp.DeviceScaleFactor;
       screenInfo.depth               := 0;
@@ -287,7 +373,7 @@ begin
     begin
       TempViewPt.x := LogicalToDevice(viewX, GlobalCEFApp.DeviceScaleFactor);
       TempViewPt.y := LogicalToDevice(viewY, GlobalCEFApp.DeviceScaleFactor);
-      TempScreenPt := PaintBox.ClientToScreen(TempViewPt);
+      TempScreenPt := Panel1.ClientToScreen(TempViewPt);
       screenX      := TempScreenPt.x;
       screenY      := TempScreenPt.y;
       Result       := True;
@@ -305,8 +391,8 @@ begin
     begin
       rect.x      := 0;
       rect.y      := 0;
-      rect.width  := DeviceToLogical(PaintBox.Width,  GlobalCEFApp.DeviceScaleFactor);
-      rect.height := DeviceToLogical(PaintBox.Height, GlobalCEFApp.DeviceScaleFactor);
+      rect.width  := DeviceToLogical(Panel1.Width,  GlobalCEFApp.DeviceScaleFactor);
+      rect.height := DeviceToLogical(Panel1.Height, GlobalCEFApp.DeviceScaleFactor);
       Result      := True;
     end
    else
@@ -323,64 +409,146 @@ procedure TForm1.chrmosrPaint(Sender : TObject;
                                     height          : Integer);
 var
   src, dst: PByte;
-  offset, i, j, w: Integer;
+  i, j, TempLineSize, TempSrcOffset, TempDstOffset, SrcStride, DstStride : Integer;
+  n : NativeUInt;
+  TempWidth, TempHeight, TempScanlineSize : integer;
+  TempBufferBits : Pointer;
+  TempForcedResize : boolean;
 begin
-  if (width <> PaintBox.Width) or (height <> PaintBox.Height) then Exit;
+  try
+    FResizeCS.Acquire;
+    TempForcedResize := False;
 
-  // ====================
-  // === WARNING !!!! ===
-  // ====================
-  // This is a simple and basic function that copies the buffer passed from
-  // CEF into the PaintBox canvas. If you have a high DPI monitor you may
-  // have rounding problems resulting in a black screen.
-  // CEF and this demo use a device_scale_factor to calculate screen logical
-  // and real sizes. If there's a rounding error CEF and this demo will have
-  // slightly different sizes and this function will exit.
-  // If you need to support high DPI, you'll have to use a better function
-  // to copy the buffer.
-
-  with PaintBox.Buffer do
-    begin
-      PaintBox.Canvas.Lock;
-      Lock;
-      try
-        for j := 0 to dirtyRectsCount - 1 do
-        begin
-          w := Width * 4;
-          offset := ((dirtyRects[j].y * Width) + dirtyRects[j].x) * 4;
-          src := @PByte(buffer)[offset];
-          dst := @PByte(Bits)[offset];
-          offset := dirtyRects[j].width * 4;
-          for i := 0 to dirtyRects[j].height - 1 do
+    if Panel1.BeginBufferDraw then
+      begin
+        if (kind = PET_POPUP) then
           begin
-            Move(src^, dst^, offset);
-            Inc(dst, w);
-            Inc(src, w);
+            if (FPopUpBitmap = nil) or
+               (width  <> FPopUpBitmap.Width) or
+               (height <> FPopUpBitmap.Height) then
+              begin
+                if (FPopUpBitmap <> nil) then FPopUpBitmap.Free;
+
+                FPopUpBitmap             := TBitmap.Create;
+                FPopUpBitmap.PixelFormat := pf32bit;
+                FPopUpBitmap.HandleType  := bmDIB;
+                FPopUpBitmap.Width       := width;
+                FPopUpBitmap.Height      := height;
+              end;
+
+            TempWidth        := FPopUpBitmap.Width;
+            TempHeight       := FPopUpBitmap.Height;
+            TempScanlineSize := FPopUpBitmap.Width * SizeOf(TRGBQuad);
+            TempBufferBits   := FPopUpBitmap.Scanline[pred(FPopUpBitmap.Height)];
+          end
+         else
+          begin
+            TempForcedResize := Panel1.UpdateBufferDimensions(Width, Height) or not(Panel1.BufferIsResized(False));
+            TempWidth        := Panel1.BufferWidth;
+            TempHeight       := Panel1.BufferHeight;
+            TempScanlineSize := Panel1.ScanlineSize;
+            TempBufferBits   := Panel1.BufferBits;
           end;
-          PaintBox.Flush(Rect(dirtyRects[j].x, dirtyRects[j].y,
-            dirtyRects[j].x + dirtyRects[j].width,  dirtyRects[j].y + dirtyRects[j].height));
-        end;
-      finally
-        Unlock;
-        PaintBox.Canvas.Unlock;
+
+        if (TempBufferBits <> nil) then
+          begin
+            SrcStride := Width * SizeOf(TRGBQuad);
+            DstStride := - TempScanlineSize;
+
+            n := 0;
+
+            while (n < dirtyRectsCount) do
+              begin
+                if (dirtyRects[n].x >= 0) and (dirtyRects[n].y >= 0) then
+                  begin
+                    TempLineSize := min(dirtyRects[n].width, TempWidth - dirtyRects[n].x) * SizeOf(TRGBQuad);
+
+                    if (TempLineSize > 0) then
+                      begin
+                        TempSrcOffset := ((dirtyRects[n].y * Width) + dirtyRects[n].x) * SizeOf(TRGBQuad);
+                        TempDstOffset := ((TempScanlineSize * pred(TempHeight)) - (dirtyRects[n].y * TempScanlineSize)) +
+                                         (dirtyRects[n].x * SizeOf(TRGBQuad));
+
+                        src := @PByte(buffer)[TempSrcOffset];
+                        dst := @PByte(TempBufferBits)[TempDstOffset];
+
+                        i := 0;
+                        j := min(dirtyRects[n].height, TempHeight - dirtyRects[n].y);
+
+                        while (i < j) do
+                          begin
+                            Move(src^, dst^, TempLineSize);
+
+                            Inc(dst, DstStride);
+                            Inc(src, SrcStride);
+                            inc(i);
+                          end;
+                      end;
+                  end;
+
+                inc(n);
+              end;
+
+            if FShowPopup and (FPopUpBitmap <> nil) then
+              Panel1.BufferDraw(FPopUpRect.Left, FPopUpRect.Top, FPopUpBitmap);
+          end;
+
+        Panel1.EndBufferDraw;
+        Panel1.InvalidatePanel;
+
+        if (kind = PET_VIEW) then
+          begin
+            if TempForcedResize or FPendingResize then PostMessage(Handle, CEF_PENDINGRESIZE, 0, 0);
+
+            FResizing      := False;
+            FPendingResize := False;
+          end;
       end;
-    end;
+  finally
+    FResizeCS.Release;
+  end;
 end;
 
 procedure TForm1.chrmosrPopupShow(Sender : TObject;
                                   const browser : ICefBrowser;
-                                        show : Boolean);
+                                        show    : Boolean);
 begin
-  // TO DO : Needed to draw the "select" items
+  if show then
+    FShowPopUp := True
+   else
+    begin
+      FShowPopUp := False;
+      FPopUpRect := rect(0, 0, 0, 0);
+
+      if (chrmosr <> nil) then chrmosr.Invalidate(PET_VIEW);
+    end;
 end;
 
 procedure TForm1.chrmosrPopupSize(Sender : TObject;
                                   const browser : ICefBrowser;
                                   const rect    : PCefRect);
 begin
-  // TO DO : Needed to draw the "select" items
-  // The rect also needs to be converted.
-  // LogicalToDevice(rect, GlobalCEFApp.DeviceScaleFactor);
+  if (GlobalCEFApp <> nil) then
+    begin
+      LogicalToDevice(rect^, GlobalCEFApp.DeviceScaleFactor);
+
+      FPopUpRect.Left   := rect.x;
+      FPopUpRect.Top    := rect.y;
+      FPopUpRect.Right  := rect.x + rect.width  - 1;
+      FPopUpRect.Bottom := rect.y + rect.height - 1;
+    end;
+end;
+
+procedure TForm1.chrmosrTooltip(Sender: TObject; const browser: ICefBrowser; var text: ustring; out Result: Boolean);
+begin
+  Panel1.hint     := text;
+  Panel1.ShowHint := (length(text) > 0);
+  Result          := True;
+end;
+
+procedure TForm1.ComboBox1Enter(Sender: TObject);
+begin
+  chrmosr.SendFocusEvent(False);
 end;
 
 function TForm1.getModifiers(Shift: TShiftState): TCefEventFlags;
@@ -432,8 +600,23 @@ begin
   if (chrmosr <> nil) then chrmosr.SendCaptureLostEvent;
 end;
 
+procedure TForm1.WMEnterMenuLoop(var aMessage: TMessage);
+begin
+  inherited;
+
+  if (aMessage.wParam = 0) and (GlobalCEFApp <> nil) then GlobalCEFApp.OsmodalLoop := True;
+end;
+
+procedure TForm1.WMExitMenuLoop(var aMessage: TMessage);
+begin
+  inherited;
+
+  if (aMessage.wParam = 0) and (GlobalCEFApp <> nil) then GlobalCEFApp.OsmodalLoop := False;
+end;
+
 procedure TForm1.BrowserCreatedMsg(var aMessage : TMessage);
 begin
+  Caption               := 'Simple OSR Browser';
   NavControlPnl.Enabled := True;
   GoBtn.Click;
 end;
@@ -447,16 +630,37 @@ begin
     end;
 end;
 
+procedure TForm1.FormCloseQuery(Sender: TObject; var CanClose: Boolean);
+begin
+  CanClose := FCanClose;
+
+  if not(FClosing) then
+    begin
+      FClosing := True;
+      Visible  := False;
+      chrmosr.CloseBrowser(True);
+    end;
+end;
+
 procedure TForm1.FormCreate(Sender: TObject);
 begin
-  chrmosr.Options.BackgroundColor := CefColorSetARGB($FF, $FF, $FF, $FF); // opaque white background color
-  chrmosr.CreateBrowser(nil, '');
-  chrmosr.InitializeDragAndDrop(PaintBox);
+  FPopUpBitmap    := nil;
+  FPopUpRect      := rect(0, 0, 0, 0);
+  FShowPopUp      := False;
+  FResizing       := False;
+  FPendingResize  := False;
+  FCanClose       := False;
+  FClosing        := False;
+  FResizeCS       := TCriticalSection.Create;
+
+  InitializeLastClick;
 end;
 
 procedure TForm1.FormDestroy(Sender: TObject);
 begin
   chrmosr.ShutdownDragAndDrop;
+
+  if (FPopUpBitmap <> nil) then FreeAndNil(FPopUpBitmap);
 end;
 
 procedure TForm1.FormHide(Sender: TObject);
@@ -467,96 +671,155 @@ end;
 
 procedure TForm1.FormShow(Sender: TObject);
 begin
-  chrmosr.WasHidden(False);
-  chrmosr.SendFocusEvent(True);
+  if chrmosr.Initialized then
+    begin
+      chrmosr.WasHidden(False);
+      chrmosr.SendFocusEvent(True);
+    end
+   else
+    begin
+      // opaque white background color
+      chrmosr.Options.BackgroundColor := CefColorSetARGB($FF, $FF, $FF, $FF);
+
+      if chrmosr.CreateBrowser(nil, '') then
+        chrmosr.InitializeDragAndDrop(Panel1)
+       else
+        Timer1.Enabled := True;
+    end;
 end;
 
-procedure TForm1.PaintBoxClick(Sender: TObject);
+procedure TForm1.Panel1Click(Sender: TObject);
 begin
   Panel1.SetFocus;
 end;
 
-procedure TForm1.PaintBoxMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TForm1.Panel1MouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   TempEvent : TCefMouseEvent;
+  TempTime  : integer;
 begin
-  if (GlobalCEFApp <> nil) then
+  if (GlobalCEFApp <> nil) and (chrmosr <> nil) then
     begin
+      Panel1.SetFocus;
+
+      if not(CancelPreviousClick(x, y, TempTime)) and (Button = FLastClickButton) then
+        inc(FLastClickCount)
+       else
+        begin
+          FLastClickPoint.x := x;
+          FLastClickPoint.y := y;
+          FLastClickCount   := 1;
+        end;
+
+      FLastClickTime      := TempTime;
+      FLastClickButton    := Button;
+
       TempEvent.x         := X;
       TempEvent.y         := Y;
       TempEvent.modifiers := getModifiers(Shift);
       DeviceToLogical(TempEvent, GlobalCEFApp.DeviceScaleFactor);
-      chrmosr.SendMouseClickEvent(@TempEvent, GetButton(Button), False, 1);
+      chrmosr.SendMouseClickEvent(@TempEvent, GetButton(Button), False, FLastClickCount);
     end;
 end;
 
-procedure TForm1.PaintBoxMouseLeave(Sender: TObject);
+procedure TForm1.Panel1MouseLeave(Sender: TObject);
 var
   TempEvent : TCefMouseEvent;
   TempPoint : TPoint;
+  TempTime  : integer;
 begin
-  if (GlobalCEFApp <> nil) then
+  if (GlobalCEFApp <> nil) and (chrmosr <> nil) then
     begin
       GetCursorPos(TempPoint);
-      TempPoint           := PaintBox.ScreenToclient(TempPoint);
+      TempPoint := Panel1.ScreenToclient(TempPoint);
+
+      if CancelPreviousClick(TempPoint.x, TempPoint.y, TempTime) then InitializeLastClick;
+
       TempEvent.x         := TempPoint.x;
       TempEvent.y         := TempPoint.y;
       TempEvent.modifiers := GetCefMouseModifiers;
       DeviceToLogical(TempEvent, GlobalCEFApp.DeviceScaleFactor);
-      chrmosr.SendMouseMoveEvent(@TempEvent, not PaintBox.MouseInControl);
+      chrmosr.SendMouseMoveEvent(@TempEvent, True);
     end;
 end;
 
-procedure TForm1.PaintBoxMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+procedure TForm1.Panel1MouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+var
+  TempEvent : TCefMouseEvent;
+  TempTime  : integer;
+begin
+  if (GlobalCEFApp <> nil) and (chrmosr <> nil) then
+    begin
+      if CancelPreviousClick(x, y, TempTime) then InitializeLastClick;
+
+      TempEvent.x         := x;
+      TempEvent.y         := y;
+      TempEvent.modifiers := getModifiers(Shift);
+      DeviceToLogical(TempEvent, GlobalCEFApp.DeviceScaleFactor);
+      chrmosr.SendMouseMoveEvent(@TempEvent, False);
+    end;
+end;
+
+procedure TForm1.Panel1MouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   TempEvent : TCefMouseEvent;
 begin
-  if (GlobalCEFApp <> nil) then
+  if (GlobalCEFApp <> nil) and (chrmosr <> nil) then
     begin
       TempEvent.x         := X;
       TempEvent.y         := Y;
       TempEvent.modifiers := getModifiers(Shift);
       DeviceToLogical(TempEvent, GlobalCEFApp.DeviceScaleFactor);
-      chrmosr.SendMouseMoveEvent(@TempEvent, not PaintBox.MouseInControl);
+      chrmosr.SendMouseClickEvent(@TempEvent, GetButton(Button), True, FLastClickCount);
     end;
 end;
 
-procedure TForm1.PaintBoxMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
-var
-  TempEvent : TCefMouseEvent;
+procedure TForm1.Panel1Resize(Sender: TObject);
 begin
-  if (GlobalCEFApp <> nil) then
-    begin
-      TempEvent.x         := X;
-      TempEvent.y         := Y;
-      TempEvent.modifiers := getModifiers(Shift);
-      DeviceToLogical(TempEvent, GlobalCEFApp.DeviceScaleFactor);
-      chrmosr.SendMouseClickEvent(@TempEvent, GetButton(Button), True, 1);
-    end;
+  DoResize;
 end;
 
-procedure TForm1.PaintBoxMouseWheel(Sender      : TObject;
-                                    Shift       : TShiftState;
-                                    WheelDelta  : Integer;
-                                    MousePos    : TPoint;
-                                    var Handled : Boolean);
-var
-  TempEvent : TCefMouseEvent;
+procedure TForm1.PendingResizeMsg(var aMessage : TMessage);
 begin
-  if (GlobalCEFApp <> nil) then
-    begin
-      TempEvent.x         := MousePos.X;
-      TempEvent.y         := MousePos.Y;
-      TempEvent.modifiers := getModifiers(Shift);
-      DeviceToLogical(TempEvent, GlobalCEFApp.DeviceScaleFactor);
-      chrmosr.SendMouseWheelEvent(@TempEvent, 0, WheelDelta);
-    end;
+  DoResize;
 end;
 
-procedure TForm1.PaintBoxResize(Sender: TObject);
+procedure TForm1.DoResize;
 begin
-  PaintBox.Buffer.SetSize(PaintBox.Width, PaintBox.Height);
-  chrmosr.WasResized;
+  try
+    FResizeCS.Acquire;
+
+    if FResizing then
+      FPendingResize := True
+     else
+      if Panel1.BufferIsResized then
+        chrmosr.Invalidate(PET_VIEW)
+       else
+        begin
+          FResizing := True;
+          chrmosr.WasResized;
+        end;
+  finally
+    FResizeCS.Release;
+  end;
+end;
+
+procedure TForm1.InitializeLastClick;
+begin
+  FLastClickCount   := 0;
+  FLastClickTime    := 0;
+  FLastClickPoint.x := 0;
+  FLastClickPoint.y := 0;
+  FLastClickButton  := mbLeft;
+end;
+
+function TForm1.CancelPreviousClick(x, y : integer; var aCurrentTime : integer) : boolean;
+begin
+  aCurrentTime := GetMessageTime;
+
+  Result := (abs(FLastClickPoint.x - x) > (GetSystemMetrics(SM_CXDOUBLECLK) div 2)) or
+            (abs(FLastClickPoint.y - y) > (GetSystemMetrics(SM_CYDOUBLECLK) div 2)) or
+            (cardinal(aCurrentTime - FLastClickTime) > GetDoubleClickTime);
 end;
 
 procedure TForm1.Panel1Enter(Sender: TObject);
@@ -567,6 +830,26 @@ end;
 procedure TForm1.Panel1Exit(Sender: TObject);
 begin
   chrmosr.SendFocusEvent(False);
+end;
+
+procedure TForm1.SnapshotBtnClick(Sender: TObject);
+begin
+  if SaveDialog1.Execute then Panel1.SaveToFile(SaveDialog1.FileName);
+end;
+
+procedure TForm1.SnapshotBtnEnter(Sender: TObject);
+begin
+  chrmosr.SendFocusEvent(False);
+end;
+
+procedure TForm1.Timer1Timer(Sender: TObject);
+begin
+  Timer1.Enabled := False;
+
+  if chrmosr.CreateBrowser(nil, '') then
+    chrmosr.InitializeDragAndDrop(Panel1)
+   else
+    if not(chrmosr.Initialized) then Timer1.Enabled := True;
 end;
 
 end.

@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Díaz Fau. All rights reserved.
+//        Copyright © 2018 Salvador Díaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -48,18 +48,17 @@ interface
 
 uses
   {$IFDEF DELPHI16_UP}
-  WinApi.Windows, System.Classes, System.SysUtils, System.UITypes, WinApi.ActiveX, System.Math,
+  {$IFDEF MSWINDOWS}WinApi.Windows, WinApi.ActiveX,{$ENDIF}
+  System.Classes, System.SysUtils, System.UITypes, System.Math,
   {$ELSE}
   Windows, Classes, SysUtils, Controls, ActiveX, Math,
   {$ENDIF}
-  uCEFTypes, uCEFInterfaces, uCEFLibFunctions, uCEFResourceHandler, uCEFGetGeolocationCallback;
+  uCEFTypes, uCEFInterfaces, uCEFLibFunctions, uCEFResourceHandler,
+  uCEFRegisterCDMCallback;
 
 const
   Kernel32DLL = 'kernel32.dll';
   SHLWAPIDLL  = 'shlwapi.dll';
-
-procedure CefStringListToStringList(var aSrcSL : TCefStringList; var aDstSL : TStringList); overload;
-procedure CefStringListToStringList(var aSrcSL : TCefStringList; var aDstSL : TStrings); overload;
 
 function CefColorGetA(color: TCefColor): Byte;
 function CefColorGetR(color: TCefColor): byte;
@@ -110,7 +109,18 @@ function SystemTimeToTzSpecificLocalTime(lpTimeZoneInformation: PTimeZoneInforma
 
 function PathIsRelativeAnsi(pszPath: LPCSTR): BOOL; stdcall; external SHLWAPIDLL name 'PathIsRelativeA';
 function PathIsRelativeUnicode(pszPath: LPCWSTR): BOOL; stdcall; external SHLWAPIDLL name 'PathIsRelativeW';
+
+{$IFNDEF DELPHI12_UP}
+function SetWindowLongPtr(hWnd: HWND; nIndex: Integer; dwNewLong: Longint): Longint; stdcall;
+{$IFDEF WIN64}
+function SetWindowLongPtr; external user32 name 'SetWindowLongPtrW';
+{$ELSE}
+function SetWindowLongPtr; external user32 name 'SetWindowLongW';
+{$ENDIF}
+{$ENDIF}
+
 function CustomPathIsRelative(const aPath : string) : boolean;
+function GetModulePath : string;
 
 function CefIsCertStatusError(Status : TCefCertStatus) : boolean;
 function CefIsCertStatusMinorError(Status : TCefCertStatus) : boolean;
@@ -119,6 +129,7 @@ function  CefCrashReportingEnabled : boolean;
 procedure CefSetCrashKeyValue(const aKey, aValue : ustring);
 
 procedure CefLog(const aFile : string; aLine, aSeverity : integer; const aMessage : string);
+procedure CefDebugLog(const aMessage : string);
 procedure OutputDebugMessage(const aMessage : string);
 function  CustomExceptionHandler(const aFunctionName : string; const aException : exception) : boolean;
 
@@ -131,18 +142,23 @@ function CefClearCrossOriginWhitelist: Boolean;
 
 procedure UInt64ToFileVersionInfo(const aVersion : uint64; var aVersionInfo : TFileVersionInfo);
 function  GetExtendedFileVersion(const aFileName : string) : uint64;
+function  GetStringFileInfo(const aFileName, aField : string; var aValue : string) : boolean;
 function  GetDLLVersion(const aDLLFile : string; var aVersionInfo : TFileVersionInfo) : boolean;
 
-function CheckLocales(const aLocalesDirPath : string) : boolean;
-function CheckResources(const aResourcesDirPath : string) : boolean;
-function CheckDLLs(const aFrameworkDirPath : string) : boolean;
+function SplitLongString(aSrcString : string) : string;
+function GetAbsoluteDirPath(const aSrcPath : string; var aRsltPath : string) : boolean;
+function CheckLocales(const aLocalesDirPath : string; var aMissingFiles : string; const aLocalesRequired : string = '') : boolean;
+function CheckResources(const aResourcesDirPath : string; var aMissingFiles : string; aCheckDevResources: boolean = True) : boolean;
+function CheckDLLs(const aFrameworkDirPath : string; var aMissingFiles : string) : boolean;
 function CheckDLLVersion(const aDLLFile : string; aMajor, aMinor, aRelease, aBuild : uint16) : boolean;
+function FileVersionInfoToString(const aVersionInfo : TFileVersionInfo) : string;
+function CheckFilesExist(var aList : TStringList; var aMissingFiles : string) : boolean;
 
 function  CefParseUrl(const url: ustring; var parts: TUrlParts): Boolean;
 function  CefCreateUrl(var parts: TUrlParts): ustring;
 function  CefFormatUrlForSecurityDisplay(const originUrl: string): string;
 function  CefGetMimeType(const extension: ustring): ustring;
-procedure CefGetExtensionsForMimeType(const mimeType: ustring; extensions: TStringList);
+procedure CefGetExtensionsForMimeType(const mimeType: ustring; var extensions: TStringList);
 
 function CefBase64Encode(const data: Pointer; dataSize: NativeUInt): ustring;
 function CefBase64Decode(const data: ustring): ICefBinaryValue;
@@ -184,13 +200,11 @@ procedure LogicalToDevice(var aRect : TCEFRect; const aDeviceScaleFactor : doubl
 function GetScreenDPI : integer;
 function GetDeviceScaleFactor : single;
 
-function CefGetGeolocation(const aCallbackFunction : TOnLocationUpdate) : boolean;
-
 implementation
 
 uses
   uCEFConstants, uCEFApplication, uCEFSchemeHandlerFactory, uCEFValue,
-  uCEFBinaryValue;
+  uCEFBinaryValue, uCEFStringList;
 
 function CefColorGetA(color: TCefColor): Byte;
 begin
@@ -232,31 +246,6 @@ begin
   Result := (int64_val shr 32) and $FFFFFFFF;
 end;
 
-procedure CefStringListToStringList(var aSrcSL : TCefStringList; var aDstSL : TStringList);
-begin
-  CefStringListToStringList(aSrcSL, TStrings(aDstSL));
-end;
-
-procedure CefStringListToStringList(var aSrcSL : TCefStringList; var aDstSL : TStrings);
-var
-  i, j : NativeUInt;
-  TempString : TCefString;
-begin
-  if (aSrcSL <> nil) and (aDstSL <> nil) then
-    begin
-      i := 0;
-      j := pred(cef_string_list_size(aSrcSL));
-
-      while (i < j) do
-        begin
-          FillChar(TempString, SizeOf(TempString), 0);
-          cef_string_list_value(aSrcSL, i, @TempString);
-          aDstSL.Add(CefStringClearAndGet(TempString));
-          inc(i);
-        end;
-    end;
-end;
-
 function CefStringClearAndGet(var str: TCefString): ustring;
 begin
   Result := CefString(@str);
@@ -265,8 +254,13 @@ end;
 
 function CefGetObject(ptr: Pointer): TObject; {$IFDEF SUPPORTS_INLINE} inline; {$ENDIF}
 begin
-  Dec(PByte(ptr), SizeOf(Pointer));
-  Result := TObject(PPointer(ptr)^);
+  if (ptr <> nil) then
+    begin
+      Dec(PByte(ptr), SizeOf(Pointer));
+      Result := TObject(PPointer(ptr)^);
+    end
+   else
+    Result := nil;
 end;
 
 function CefGetData(const i: ICefBaseRefCounted): Pointer; {$IFDEF SUPPORTS_INLINE} inline; {$ENDIF}
@@ -501,6 +495,28 @@ begin
     end;
 end;
 
+procedure CefDebugLog(const aMessage : string);
+const
+  DEFAULT_LINE = 1;
+var
+  TempString : string;
+begin
+  if (GlobalCEFApp <> nil) and GlobalCEFApp.LibLoaded then
+    begin
+      TempString := 'PID: ' + IntToStr(GetCurrentProcessID) + ', TID: ' + IntToStr(GetCurrentThreadID);
+
+      case GlobalCEFApp.ProcessType of
+        ptBrowser   : TempString := TempString + ', PT: Browser';
+        ptRenderer  : TempString := TempString + ', PT: Renderer';
+        ptZygote    : TempString := TempString + ', PT: Zygote';
+        ptGPU       : TempString := TempString + ', PT: GPU';
+        else          TempString := TempString + ', PT: Other';
+      end;
+
+      CefLog('CEF4Delphi', DEFAULT_LINE, CEF_LOG_SEVERITY_ERROR, TempString + ' - ' + aMessage);
+    end;
+end;
+
 procedure OutputDebugMessage(const aMessage : string);
 const
   DEFAULT_LINE = 1;
@@ -575,146 +591,239 @@ begin
   Result := cef_clear_cross_origin_whitelist <> 0;
 end;
 
-function CheckLocales(const aLocalesDirPath : string) : boolean;
+function SplitLongString(aSrcString : string) : string;
+const
+  MAXLINELENGTH = 50;
+begin
+  while (length(aSrcString) > 0) do
+    begin
+      if (length(Result) > 0) then
+        Result := Result + CRLF + copy(aSrcString, 1, MAXLINELENGTH)
+       else
+        Result := Result + copy(aSrcString, 1, MAXLINELENGTH);
+
+      aSrcString := copy(aSrcString, succ(MAXLINELENGTH), length(aSrcString));
+    end;
+end;
+
+function GetAbsoluteDirPath(const aSrcPath : string; var aRsltPath : string) : boolean;
+begin
+  Result := True;
+
+  if (length(aSrcPath) > 0) then
+    begin
+      aRsltPath := IncludeTrailingPathDelimiter(aSrcPath);
+
+      if DirectoryExists(aSrcPath) then
+        begin
+          if CustomPathIsRelative(aRsltPath) then aRsltPath := GetModulePath + aRsltPath;
+        end
+       else
+        Result := False;
+    end
+   else
+    aRsltPath := '';
+end;
+
+function CheckLocales(const aLocalesDirPath : string; var aMissingFiles : string; const aLocalesRequired : string) : boolean;
+const
+  LOCALES_REQUIRED_DEFAULT =
+    'am,' +
+    'ar,' +
+    'bg,' +
+    'bn,' +
+    'ca,' +
+    'cs,' +
+    'da,' +
+    'de,' +
+    'el,' +
+    'en-GB,' +
+    'en-US,' +
+    'es,' +
+    'es-419,' +
+    'et,' +
+    'fa,' +
+    'fi,' +
+    'fil,' +
+    'fr,' +
+    'gu,' +
+    'he,' +
+    'hi,' +
+    'hr,' +
+    'hu,' +
+    'id,' +
+    'it,' +
+    'ja,' +
+    'kn,' +
+    'ko,' +
+    'lt,' +
+    'lv,' +
+    'ml,' +
+    'mr,' +
+    'ms,' +
+    'nb,' +
+    'nl,' +
+    'pl,' +
+    'pt-BR,' +
+    'pt-PT,' +
+    'ro,' +
+    'ru,' +
+    'sk,' +
+    'sl,' +
+    'sr,' +
+    'sv,' +
+    'sw,' +
+    'ta,' +
+    'te,' +
+    'th,' +
+    'tr,' +
+    'uk,' +
+    'vi,' +
+    'zh-CN,' +
+    'zh-TW';
 var
-  TempDir : string;
+  i        : integer;
+  TempDir  : string;
+  TempList : TStringList;
+begin
+  Result   := False;
+  TempList := nil;
+
+  try
+    try
+      if (length(aLocalesDirPath) > 0) then
+        TempDir := IncludeTrailingPathDelimiter(aLocalesDirPath)
+       else
+        TempDir := 'locales\';
+
+      TempList := TStringList.Create;
+
+      if (length(aLocalesRequired) > 0) then
+        TempList.CommaText := aLocalesRequired
+       else
+        TempList.CommaText := LOCALES_REQUIRED_DEFAULT;
+
+      i := 0;
+      while (i < TempList.Count) do
+        begin
+          TempList[i] := TempDir + TempList[i] + '.pak';
+          inc(i);
+        end;
+
+      if DirectoryExists(TempDir) then
+        Result := CheckFilesExist(TempList, aMissingFiles)
+       else
+        aMissingFiles := trim(aMissingFiles) + CRLF + TempList.Text;
+    except
+      on e : exception do
+        if CustomExceptionHandler('CheckLocales', e) then raise;
+    end;
+  finally
+    if (TempList <> nil) then FreeAndNil(TempList);
+  end;
+end;
+
+function CheckResources(const aResourcesDirPath : string; var aMissingFiles : string; aCheckDevResources: boolean) : boolean;
+var
+  TempDir    : string;
+  TempList   : TStringList;
+  TempExists : boolean;
 begin
   Result := False;
 
   try
-    if (length(aLocalesDirPath) > 0) then
-      TempDir := aLocalesDirPath
-     else
-      TempDir := 'locales';
+    try
+      TempExists := GetAbsoluteDirPath(aResourcesDirPath, TempDir);
 
-    if DirectoryExists(TempDir) then
+      TempList := TStringList.Create;
+      TempList.Add(TempDir + 'natives_blob.bin');
+      TempList.Add(TempDir + 'snapshot_blob.bin');
+      TempList.Add(TempDir + 'v8_context_snapshot.bin');
+      TempList.Add(TempDir + 'cef.pak');
+      TempList.Add(TempDir + 'cef_100_percent.pak');
+      TempList.Add(TempDir + 'cef_200_percent.pak');
+      TempList.Add(TempDir + 'cef_extensions.pak');
+
+      if aCheckDevResources then TempList.Add(TempDir + 'devtools_resources.pak');
+
+      if TempExists then
+        Result := CheckFilesExist(TempList, aMissingFiles)
+       else
+        aMissingFiles := trim(aMissingFiles) + CRLF + TempList.Text;
+    except
+      on e : exception do
+        if CustomExceptionHandler('CheckResources', e) then raise;
+    end;
+  finally
+    if (TempList <> nil) then FreeAndNil(TempList);
+  end;
+end;
+
+function CheckDLLs(const aFrameworkDirPath : string; var aMissingFiles : string) : boolean;
+var
+  TempDir    : string;
+  TempList   : TStringList;
+  TempExists : boolean;
+begin
+  Result   := False;
+  TempList := nil;
+
+  try
+    try
+      TempExists := GetAbsoluteDirPath(aFrameworkDirPath, TempDir);
+
+      // The icudtl.dat file must be placed next to libcef.dll
+      // http://www.magpcss.org/ceforum/viewtopic.php?f=6&t=14503#p32263
+
+      TempList := TStringList.Create;
+      TempList.Add(TempDir + CHROMEELF_DLL);
+      TempList.Add(TempDir + LIBCEF_DLL);
+      TempList.Add(TempDir + 'd3dcompiler_43.dll');
+      TempList.Add(TempDir + 'd3dcompiler_47.dll');
+      TempList.Add(TempDir + 'libEGL.dll');
+      TempList.Add(TempDir + 'libGLESv2.dll');
+      TempList.Add(TempDir + 'swiftshader\libEGL.dll');
+      TempList.Add(TempDir + 'swiftshader\libGLESv2.dll');
+      TempList.Add(TempDir + 'icudtl.dat');
+
+      if TempExists then
+        Result := CheckFilesExist(TempList, aMissingFiles)
+       else
+        aMissingFiles := trim(aMissingFiles) + CRLF + TempList.Text;
+    except
+      on e : exception do
+        if CustomExceptionHandler('CheckDLLs', e) then raise;
+    end;
+  finally
+    if (TempList <> nil) then FreeAndNil(TempList);
+  end;
+end;
+
+function CheckFilesExist(var aList : TStringList; var aMissingFiles : string) : boolean;
+var
+  i : integer;
+begin
+  Result := True;
+
+  try
+    if (aList <> nil) then
       begin
-        TempDir := IncludeTrailingPathDelimiter(TempDir);
+        i := 0;
 
-        Result := FileExists(TempDir + 'am.pak') and
-                  FileExists(TempDir + 'ar.pak') and
-                  FileExists(TempDir + 'bg.pak') and
-                  FileExists(TempDir + 'bn.pak') and
-                  FileExists(TempDir + 'ca.pak') and
-                  FileExists(TempDir + 'cs.pak') and
-                  FileExists(TempDir + 'da.pak') and
-                  FileExists(TempDir + 'de.pak') and
-                  FileExists(TempDir + 'el.pak') and
-                  FileExists(TempDir + 'en-GB.pak') and
-                  FileExists(TempDir + 'en-US.pak') and
-                  FileExists(TempDir + 'es.pak') and
-                  FileExists(TempDir + 'es-419.pak') and
-                  FileExists(TempDir + 'et.pak') and
-                  FileExists(TempDir + 'fa.pak') and
-                  FileExists(TempDir + 'fi.pak') and
-                  FileExists(TempDir + 'fil.pak') and
-                  FileExists(TempDir + 'fr.pak') and
-                  FileExists(TempDir + 'gu.pak') and
-                  FileExists(TempDir + 'he.pak') and
-                  FileExists(TempDir + 'hi.pak') and
-                  FileExists(TempDir + 'hr.pak') and
-                  FileExists(TempDir + 'hu.pak') and
-                  FileExists(TempDir + 'id.pak') and
-                  FileExists(TempDir + 'it.pak') and
-                  FileExists(TempDir + 'ja.pak') and
-                  FileExists(TempDir + 'kn.pak') and
-                  FileExists(TempDir + 'ko.pak') and
-                  FileExists(TempDir + 'lt.pak') and
-                  FileExists(TempDir + 'lv.pak') and
-                  FileExists(TempDir + 'ml.pak') and
-                  FileExists(TempDir + 'mr.pak') and
-                  FileExists(TempDir + 'ms.pak') and
-                  FileExists(TempDir + 'nb.pak') and
-                  FileExists(TempDir + 'nl.pak') and
-                  FileExists(TempDir + 'pl.pak') and
-                  FileExists(TempDir + 'pt-BR.pak') and
-                  FileExists(TempDir + 'pt-PT.pak') and
-                  FileExists(TempDir + 'ro.pak') and
-                  FileExists(TempDir + 'ru.pak') and
-                  FileExists(TempDir + 'sk.pak') and
-                  FileExists(TempDir + 'sl.pak') and
-                  FileExists(TempDir + 'sr.pak') and
-                  FileExists(TempDir + 'sv.pak') and
-                  FileExists(TempDir + 'sw.pak') and
-                  FileExists(TempDir + 'ta.pak') and
-                  FileExists(TempDir + 'te.pak') and
-                  FileExists(TempDir + 'th.pak') and
-                  FileExists(TempDir + 'tr.pak') and
-                  FileExists(TempDir + 'uk.pak') and
-                  FileExists(TempDir + 'vi.pak') and
-                  FileExists(TempDir + 'zh-CN.pak') and
-                  FileExists(TempDir + 'zh-TW.pak');
+        while (i < aList.Count) do
+          begin
+            if (length(aList[i]) > 0) and not(FileExists(aList[i])) then
+              begin
+                Result        := False;
+                aMissingFiles := aMissingFiles + aList[i] + CRLF;
+              end;
+
+            inc(i);
+          end;
       end;
   except
     on e : exception do
-      if CustomExceptionHandler('CheckLocales', e) then raise;
-  end;
-end;
-
-function CheckResources(const aResourcesDirPath : string) : boolean;
-var
-  TempDir : string;
-begin
-  Result := False;
-
-  try
-    if (length(aResourcesDirPath) > 0) then
-      begin
-        if DirectoryExists(aResourcesDirPath) then
-          begin
-            TempDir := IncludeTrailingPathDelimiter(aResourcesDirPath);
-            if CustomPathIsRelative(TempDir) then TempDir := ExtractFilePath(ParamStr(0)) + TempDir;
-          end
-         else
-          exit;
-      end
-     else
-      TempDir := '';
-
-    Result := FileExists(TempDir + 'natives_blob.bin')       and
-              FileExists(TempDir + 'snapshot_blob.bin')      and
-              FileExists(TempDir + 'icudtl.dat')             and
-              FileExists(TempDir + 'cef.pak')                and
-              FileExists(TempDir + 'cef_100_percent.pak')    and
-              FileExists(TempDir + 'cef_200_percent.pak')    and
-              FileExists(TempDir + 'cef_extensions.pak')     and
-              FileExists(TempDir + 'devtools_resources.pak');
-  except
-    on e : exception do
-      if CustomExceptionHandler('CheckResources', e) then raise;
-  end;
-end;
-
-function CheckDLLs(const aFrameworkDirPath : string) : boolean;
-var
-  TempDir : string;
-begin
-  Result := False;
-
-  try
-    if (length(aFrameworkDirPath) > 0) then
-      begin
-        if DirectoryExists(aFrameworkDirPath) then
-          begin
-            TempDir := IncludeTrailingPathDelimiter(aFrameworkDirPath);
-            if CustomPathIsRelative(TempDir) then TempDir := ExtractFilePath(ParamStr(0)) + TempDir;
-          end
-         else
-          exit;
-      end
-     else
-      TempDir := '';
-
-    Result := FileExists(TempDir + CHROMEELF_DLL)            and
-              FileExists(TempDir + LIBCEF_DLL)               and
-              FileExists(TempDir + 'd3dcompiler_43.dll')     and
-              FileExists(TempDir + 'd3dcompiler_47.dll')     and
-              FileExists(TempDir + 'libEGL.dll')             and
-              FileExists(TempDir + 'libGLESv2.dll')          and
-              FileExists(TempDir + 'widevinecdmadapter.dll');
-  except
-    on e : exception do
-      if CustomExceptionHandler('CheckDLLs', e) then raise;
+      if CustomExceptionHandler('CheckFilesExist', e) then raise;
   end;
 end;
 
@@ -762,6 +871,96 @@ begin
   end;
 end;
 
+function GetStringFileInfo(const aFileName, aField : string; var aValue : string) : boolean;
+type
+  PLangAndCodepage = ^TLangAndCodepage;
+  TLangAndCodepage = record
+    wLanguage : word;
+    wCodePage : word;
+  end;
+var
+  TempSize     : DWORD;
+  TempBuffer   : pointer;
+  TempHandle   : cardinal;
+  TempPointer  : pointer;
+  TempSubBlock : string;
+  TempLang     : PLangAndCodepage;
+  TempArray    : array of TLangAndCodepage;
+  i, j : DWORD;
+begin
+  Result     := False;
+  TempBuffer := nil;
+  TempArray  := nil;
+  aValue     := '';
+
+  try
+    try
+      TempSize := GetFileVersionInfoSize(PChar(aFileName), TempHandle);
+
+      if (TempSize > 0) then
+        begin
+          GetMem(TempBuffer, TempSize);
+
+          if GetFileVersionInfo(PChar(aFileName), 0, TempSize, TempBuffer) then
+            begin
+              if VerQueryValue(TempBuffer, '\VarFileInfo\Translation\', Pointer(TempLang), TempSize) then
+                begin
+                  i := 0;
+                  j := TempSize div SizeOf(TLangAndCodepage);
+
+                  SetLength(TempArray, j);
+
+                  while (i < j) do
+                    begin
+                      TempArray[i].wLanguage := TempLang.wLanguage;
+                      TempArray[i].wCodePage := TempLang.wCodePage;
+                      inc(TempLang);
+                      inc(i);
+                    end;
+                end;
+
+              i := 0;
+              j := Length(TempArray);
+
+              while (i < j) and not(Result) do
+                begin
+                  TempSubBlock := '\StringFileInfo\' +
+                                  IntToHex(TempArray[i].wLanguage, 4) + IntToHex(TempArray[i].wCodePage, 4) +
+                                  '\' + aField;
+
+                  if VerQueryValue(TempBuffer, PChar(TempSubBlock), TempPointer, TempSize) then
+                    begin
+                      aValue := trim(PChar(TempPointer));
+                      Result := (length(aValue) > 0);
+                    end;
+
+                  inc(i);
+                end;
+
+              // Adobe's flash player DLL uses a different codepage to store the StringFileInfo fields
+              if not(Result) and (j > 0) and (TempArray[0].wCodePage <> 1252) then
+                begin
+                  TempSubBlock := '\StringFileInfo\' +
+                                  IntToHex(TempArray[0].wLanguage, 4) + IntToHex(1252, 4) +
+                                  '\' + aField;
+
+                  if VerQueryValue(TempBuffer, PChar(TempSubBlock), TempPointer, TempSize) then
+                    begin
+                      aValue := trim(PChar(TempPointer));
+                      Result := (length(aValue) > 0);
+                    end;
+                end;
+            end;
+        end;
+    except
+      on e : exception do
+        if CustomExceptionHandler('GetStringFileInfo', e) then raise;
+    end;
+  finally
+    if (TempBuffer <> nil) then FreeMem(TempBuffer);
+  end;
+end;
+
 function GetDLLVersion(const aDLLFile : string; var aVersionInfo : TFileVersionInfo) : boolean;
 var
   TempVersion : uint64;
@@ -779,6 +978,14 @@ begin
     on e : exception do
       if CustomExceptionHandler('GetDLLVersion', e) then raise;
   end;
+end;
+
+function FileVersionInfoToString(const aVersionInfo : TFileVersionInfo) : string;
+begin
+  Result := IntToStr(aVersionInfo.MajorVer) + '.' +
+            IntToStr(aVersionInfo.MinorVer) + '.' +
+            IntToStr(aVersionInfo.Release)  + '.' +
+            IntToStr(aVersionInfo.Build);
 end;
 
 function CheckDLLVersion(const aDLLFile : string; aMajor, aMinor, aRelease, aBuild : uint16) : boolean;
@@ -799,6 +1006,11 @@ begin
   {$ELSE}
   Result := PathIsRelativeAnsi(PChar(aPath));
   {$ENDIF}
+end;
+
+function GetModulePath : string;
+begin
+  Result := IncludeTrailingPathDelimiter(ExtractFileDir(GetModuleName(HInstance)));
 end;
 
 function CefParseUrl(const url: ustring; var parts: TUrlParts): Boolean;
@@ -860,25 +1072,18 @@ begin
   Result := CefStringFreeAndGet(cef_get_mime_type(@s));
 end;
 
-procedure CefGetExtensionsForMimeType(const mimeType: ustring; extensions: TStringList);
+procedure CefGetExtensionsForMimeType(const mimeType: ustring; var extensions: TStringList);
 var
-  list: TCefStringList;
-  s, str: TCefString;
-  i: Integer;
+  TempSL       : ICefStringList;
+  TempMimeType : TCefString;
 begin
-  list := cef_string_list_alloc();
-  try
-    s := CefString(mimeType);
-    cef_get_extensions_for_mime_type(@s, list);
-    for i := 0 to cef_string_list_size(list) - 1 do
+  if (extensions <> nil) then
     begin
-      FillChar(str, SizeOf(str), 0);
-      cef_string_list_value(list, i, @str);
-      extensions.Add(CefStringClearAndGet(str));
+      TempSL       := TCefStringListOwn.Create;
+      TempMimeType := CefString(mimeType);
+      cef_get_extensions_for_mime_type(@TempMimeType, TempSL.Handle);
+      TempSL.CopyToStrings(extensions);
     end;
-  finally
-    cef_string_list_free(list);
-  end;
 end;
 
 function CefBase64Encode(const data: Pointer; dataSize: NativeUInt): ustring;
@@ -1007,14 +1212,6 @@ var
 begin
   TempPath := CefString(path);
   cef_load_crlsets_file(@TempPath);
-end;
-
-function CefGetGeolocation(const aCallbackFunction : TOnLocationUpdate) : boolean;
-var
-  TempGeoCallBack : ICefGetGeolocationCallback;
-begin
-  TempGeoCallBack := TCefFastGetGeolocationCallback.Create(aCallbackFunction);
-  Result          := (cef_get_geolocation(TempGeoCallBack.Wrap) <> 0);
 end;
 
 function CefIsKeyDown(aWparam : WPARAM) : boolean;
